@@ -16,7 +16,7 @@ Developed by [Jutelabs Limited](https://www.linkedin.com/in/chimaobi-julius-mond
 | `lib/quiz.js` | Picks each 10-question quiz |
 | `lib/chapters.json` | Official chapter list (RRBN, June 2026) with short names and alternative spellings |
 | `lib/match.js` | Matches typed chapter names to official chapters (used by the API and the page) |
-| `lib/counter.js`, `lib/access.js` | Shared API helpers; admin sign-in check |
+| `lib/counter.js`, `lib/adminauth.js` | Shared API helpers; admin password check |
 | `functions/api/` | API: `quiz/start`, `quiz/answer`, `card`, `stats`, `admin/*` |
 | `db/schema.sql` | Database tables (D1 `wrd2026-cards`) |
 | `wrangler.toml` | Pages config and the D1 binding |
@@ -30,9 +30,9 @@ Developed by [Jutelabs Limited](https://www.linkedin.com/in/chimaobi-julius-mond
 
 ## Admin access
 
-`/admin` is protected by Cloudflare Access (email one-time code). Only the addresses in `lib/access.js` are accepted, and the API verifies the Access token itself. Pages secrets: `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD` (and optionally `ADMIN_EMAILS`, `IP_SALT`).
+`/admin` asks for a password. Set it as the `ADMIN_PASSWORD` secret (12 characters or more) in Cloudflare Pages, then redeploy. Ten wrong passwords from one IP address in an hour locks that address out for the hour. Optional secret: `IP_SALT`.
 
-For local testing, put `DEV_ADMIN_EMAIL=you@example.com` in `.dev.vars` (git-ignored) and run:
+For local testing, put `ADMIN_PASSWORD=some-local-password` in `.dev.vars` (git-ignored) and run:
 
 ```bash
 python src/build.py && npx wrangler pages dev site

@@ -1,12 +1,12 @@
-// Admin API for the PRO. Protected by Cloudflare Access: only the allowed email addresses (lib/access.js) get in.
-//   GET  /api/admin/me               who is signed in
+// Admin API for the PRO. Protected by a password (the ADMIN_PASSWORD secret, see lib/adminauth.js).
+//   GET  /api/admin/me               checks the password
 //   GET  /api/admin/summary          totals, quiz numbers, cards per day
 //   GET  /api/admin/chapters         official chapters with counts, pending names, learned spellings
 //   POST /api/admin/merge {from,to}  move a pending name into an official chapter and remember the spelling
 //   POST /api/admin/discard {key}    delete a junk pending name
 //   GET  /api/admin/winners          10/10 first attempts with their winner codes
 //   GET  /api/admin/verify?code=     look up one winner code
-import { adminIdentity } from "../../../lib/access.js";
+import { checkAdmin } from "../../../lib/adminauth.js";
 import { CHAPTERS, CHAPTER_BY_CODE, PENDING, PRO_KEY, json, readBody } from "../../../lib/counter.js";
 
 const DAY = 86400e3;
@@ -100,17 +100,18 @@ async function verify(db, url) {
 }
 
 export async function onRequest({ request, env, params }) {
-  const who = await adminIdentity(request, env);
-  if (who.status === "setup") return json({ error: "Admin sign-in is not set up yet: add Cloudflare Access and the ACCESS_TEAM_DOMAIN and ACCESS_AUD secrets." }, 503);
-  if (who.status === "signin") return json({ error: "Please sign in." }, 401);
-  if (who.status === "forbidden") return json({ error: "This email address does not have admin access.", email: who.email }, 403);
   if (!env.DB) return json({ error: "database not configured" }, 503);
+  const who = await checkAdmin(request, env, env.DB);
+  if (who.status === "setup") return json({ error: "Admin password is not set up yet: add the ADMIN_PASSWORD secret (12+ characters) in Cloudflare Pages and redeploy." }, 503);
+  if (who.status === "locked") return json({ error: "Too many wrong passwords. Try again in an hour." }, 429);
+  if (who.status === "signin") return json({ error: "Please enter the admin password." }, 401);
+  if (who.status === "wrong") return json({ error: "Wrong password." }, 401);
 
   const route = (params.path || []).join("/");
   const method = request.method;
   const db = env.DB;
   try {
-    if (method === "GET" && route === "me") return json({ email: who.email });
+    if (method === "GET" && route === "me") return json({ ok: true });
     if (method === "GET" && route === "summary") return json(await summary(db));
     if (method === "GET" && route === "chapters") return json(await chapters(db));
     if (method === "GET" && route === "winners") return json(await winners(db));

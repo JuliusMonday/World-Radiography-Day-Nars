@@ -14,7 +14,8 @@
 
 ## Needs doing in the Cloudflare dashboard
 
-- [ ] Set up Cloudflare Access for `/admin` and `/api/admin` (only narsnationalinformationbureau@gmail.com and jutelabsofficial@gmail.com), then add the `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD` secrets
+- [ ] Delete the Cloudflare Access application for this site (Zero Trust → Access → Applications); it now sends `/admin` to an email login
+- [ ] Add the `ADMIN_PASSWORD` secret (12+ characters) and redeploy; share it only with the PRO
 - [ ] Optional: set the `IP_SALT` secret and redeploy
 
 ## Decisions for NARS

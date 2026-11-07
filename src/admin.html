@@ -68,15 +68,19 @@ tr.zero td{color:#9aa6b2}
 
   <section class="panel login" id="login">
     <h1>WRD 2026 Admin</h1>
-    <p id="loginMsg">Checking your sign-in…</p>
-    <p class="err" id="loginErr" hidden></p>
-    <div class="row"><button class="btn primary" id="retry" type="button" hidden>Try again</button><a class="btn quiet" id="switchAcct" href="/cdn-cgi/access/logout" hidden>Use a different email</a></div>
+    <p>For the NARS National Information Bureau and Jutelabs only.</p>
+    <form id="loginForm" autocomplete="on">
+      <label for="pw" style="display:block;font-weight:700;margin-bottom:6px">Admin password</label>
+      <input type="password" id="pw" autocomplete="current-password" required style="width:100%">
+      <p class="err" id="loginErr" hidden></p>
+      <div class="row"><button class="btn primary" id="signIn" type="submit">Sign in</button></div>
+    </form>
   </section>
 
   <div id="app" hidden>
     <div class="top">
-      <div><h1>WRD 2026 Admin</h1><small><span id="who"></span> · <span id="updated">Loading…</span></small></div>
-      <div class="tools" style="margin:0"><button class="btn quiet" id="refresh" type="button">Refresh</button><a class="btn quiet" href="/cdn-cgi/access/logout" style="text-decoration:none">Sign out</a></div>
+      <div><h1>WRD 2026 Admin</h1><small><span id="updated">Loading…</span></small></div>
+      <div class="tools" style="margin:0"><button class="btn quiet" id="refresh" type="button">Refresh</button><button class="btn quiet" id="signOut" type="button">Sign out</button></div>
     </div>
 
     <div class="stats" id="stats"></div>
@@ -146,27 +150,31 @@ function n(v){return Number(v||0).toLocaleString("en-NG");}
 function when(ts){if(!ts)return "";var d=new Date(ts);return d.toLocaleString("en-NG",{timeZone:"Africa/Lagos",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"});}
 function dur(s){if(s==null)return "";s=Math.round(s);return s<60?s+"s":Math.floor(s/60)+"m "+(s%60)+"s";}
 
+var KEY="wrd-admin-pw",pw="";
+try{pw=sessionStorage.getItem(KEY)||"";}catch(e){}
 function api(path,opts){
-  opts=opts||{};opts.credentials="same-origin";opts.headers=Object.assign({},opts.body?{"content-type":"application/json"}:{},opts.headers||{});
+  opts=opts||{};opts.credentials="same-origin";opts.headers=Object.assign({"x-admin-password":pw},opts.body?{"content-type":"application/json"}:{},opts.headers||{});
   return fetch("/api/admin/"+path,opts).then(function(r){
     return r.json().catch(function(){return {};}).then(function(j){if(!r.ok){var e=new Error(j.error||("Request failed ("+r.status+")"));e.status=r.status;throw e;}return j;});
   });
 }
-function showLogin(msg,status){
+function savePw(v){pw=v;try{v?sessionStorage.setItem(KEY,v):sessionStorage.removeItem(KEY);}catch(e){}}
+function showLogin(msg){
   $("app").hidden=true;$("login").hidden=false;
-  $("loginMsg").textContent=status===403?"You are signed in, but this email address is not on the admin list.":status===401?"Your sign-in has expired.":status===503?"Admin sign-in is not set up yet.":"Admin is only for the NARS National Information Bureau and Jutelabs.";
   $("loginErr").hidden=!msg;$("loginErr").textContent=msg||"";
-  $("retry").hidden=false;$("switchAcct").hidden=status!==403&&status!==401;
+  $("signIn").disabled=false;$("pw").focus();
 }
 function load(){
   $("updated").textContent="Loading…";
-  return Promise.all([api("summary"),api("chapters"),api("winners"),api("me")]).then(function(r){
-    data.summary=r[0];data.chapters=r[1];data.winners=r[2].winners;$("who").textContent=r[3].email;
+  return api("me").then(function(){
+    return Promise.all([api("summary"),api("chapters"),api("winners")]);
+  }).then(function(r){
+    data.summary=r[0];data.chapters=r[1];data.winners=r[2].winners;
     $("login").hidden=true;$("app").hidden=false;render();
     $("updated").textContent="Updated "+new Date().toLocaleTimeString("en-NG",{timeZone:"Africa/Lagos",hour:"2-digit",minute:"2-digit"});
   }).catch(function(e){
-    if(e.status===401||e.status===403||e.status===503)showLogin(e.message,e.status);
-    else{$("updated").textContent=e.message;if($("app").hidden)showLogin(e.message,e.status);}
+    if(e.status===401||e.status===429||e.status===503){savePw("");showLogin(e.message==="Please enter the admin password."?"":e.message);}
+    else{$("updated").textContent=e.message;if($("app").hidden)showLogin(e.message);}
   });
 }
 function render(){
@@ -205,7 +213,11 @@ function csv(name,rows){
   var a=document.createElement("a");a.href=URL.createObjectURL(new Blob(["﻿"+text],{type:"text/csv"}));a.download=name;document.body.appendChild(a);a.click();a.remove();
 }
 
-$("retry").addEventListener("click",function(){location.reload();});
+$("loginForm").addEventListener("submit",function(e){
+  e.preventDefault();var v=$("pw").value;if(!v)return;
+  savePw(v);$("signIn").disabled=true;$("loginErr").hidden=true;load();
+});
+$("signOut").addEventListener("click",function(){savePw("");$("pw").value="";data={summary:null,chapters:null,winners:null};showLogin("");});
 $("refresh").addEventListener("click",load);
 $("chSearch").addEventListener("input",renderChapters);
 Array.prototype.forEach.call(document.querySelectorAll(".tabs button"),function(b){
@@ -243,7 +255,7 @@ $("csvChapters").addEventListener("click",function(){csv("wrd2026-chapters.csv",
 $("csvPending").addEventListener("click",function(){csv("wrd2026-pending-names.csv",[["Typed name","Cards"]].concat(data.chapters.pending.map(function(p){return [p.name,p.count];})));});
 $("csvWinners").addEventListener("click",function(){csv("wrd2026-winners.csv",[["Code","Name","Chapter typed","Chapter code","Role","Seconds","Finished (Nigeria time)"]].concat(data.winners.map(function(w){return [w.code,w.name,w.chapter,w.chapter_code,w.role,w.seconds,when(w.finished_at)];})));});
 
-load();
+if(pw)load();else showLogin("");
 })();
 </script>
 </body>
