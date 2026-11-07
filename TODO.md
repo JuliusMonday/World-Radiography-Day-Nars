@@ -9,16 +9,14 @@
 - [x] Public threshold lowered to 50 cards; ranking shows official chapters only
 - [x] Fixed "1 radiographers"
 - [x] Private `/admin` page: totals, students vs radiographers, quiz numbers, cards per day, chapters, CSV export
-- [x] Fair prizes: server-side marking (the page never gets the answers), only a device's first finished quiz counts
-- [x] Winner codes (e.g. `WRD-7K3QX`) on the result screen and share image, checkable in admin, with a random draw
+- [x] Server-side marking (the page never gets the answers)
+- [x] Prizes removed from the site: NARS runs 10/10 prizes on WhatsApp
 
 ## Needs doing in the Cloudflare dashboard
 
-- [ ] Delete the Cloudflare Access application for this site (Zero Trust → Access → Applications); it now sends `/admin` to an email login
-- [ ] Add the `ADMIN_PASSWORD` secret (12+ characters) and redeploy; share it only with the PRO
+- [x] Admin sign-in uses the `ADMIN_PASSWORD` secret (Cloudflare Access removed)
 - [ ] Optional: set the `IP_SALT` secret and redeploy
 
 ## Decisions for NARS
 
-- [ ] Prize rules (all 10/10 first attempts, first X, or a random draw) and how winners are contacted
 - [ ] Confirm qualified radiographers may use the NARS-branded flyer

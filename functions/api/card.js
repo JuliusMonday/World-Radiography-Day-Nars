@@ -1,7 +1,6 @@
-// POST /api/card { chapter, role, device, attempt, name } -> records one downloaded card.
+// POST /api/card { chapter, role, device } -> records one downloaded card.
 // Students count towards their chapter (official schools ranked, other names pending until an admin merges them);
-// qualified radiographers (role "pro") count in their own group. Only counts are kept, plus a timestamp log.
-// If `attempt` is a winning quiz attempt, the winner's name and chapter are saved with their code for prize checks.
+// qualified radiographers (role "pro") count in their own group. Only counts are kept, plus a timestamp log. No names are stored.
 import {
   PRO_KEY, cleanDevice, cleanText, hitStatements, ipHash, json, learnedAliases, methodNotAllowed,
   overLimit, readBody, readStats, resolveChapter,
@@ -34,16 +33,6 @@ export async function onRequestPost({ request, env }) {
         .bind(ch.key, now),
       db.prepare("INSERT INTO card_log (ts, key) VALUES (?, ?)").bind(now, ch.key)
     );
-    // Link a winner's name and chapter to their code (only for winning attempts, only once).
-    const attempt = typeof body.attempt === "string" && /^[a-f0-9]{24}$/.test(body.attempt) ? body.attempt : "";
-    const name = cleanText(body.name, 40);
-    if (attempt && name) {
-      stmts.push(
-        db
-          .prepare("UPDATE attempts SET name = ?, chapter = ?, chapter_code = ? WHERE id = ? AND code IS NOT NULL AND name IS NULL")
-          .bind(name, chapterText, pro ? "" : ch.code || "", attempt)
-      );
-    }
     await db.batch(stmts);
 
     const stats = await readStats(db);

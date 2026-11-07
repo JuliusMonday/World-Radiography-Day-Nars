@@ -1,6 +1,6 @@
-// POST /api/quiz/answer { attempt, index, choice } -> { correct, answer, fact, done, score?, total?, first?, code? }
-// Answers must come in order, once each. The first finished attempt per device that scores 10/10 gets a winner code.
-import { json, methodNotAllowed, newCode, readBody } from "../../../lib/counter.js";
+// POST /api/quiz/answer { attempt, index, choice } -> { correct, answer, fact, done, score?, total? }
+// Answers must come in order, once each.
+import { json, methodNotAllowed, readBody } from "../../../lib/counter.js";
 import { BY_ID } from "../../../lib/questions.js";
 
 const MAX_AGE = 3 * 3600e3; // an attempt must be finished within 3 hours
@@ -32,35 +32,15 @@ export async function onRequestPost({ request, env }) {
     const score = a.score + (correct ? 1 : 0);
     const done = index === qids.length - 1;
 
-    let first = 0;
-    let code = null;
-    if (done) {
-      const prior = await db
-        .prepare("SELECT COUNT(*) AS n FROM attempts WHERE device = ? AND finished_at IS NOT NULL AND id <> ?")
-        .bind(a.device, a.id)
-        .first();
-      first = prior.n === 0 ? 1 : 0;
-      if (first && score === a.total) code = newCode();
-    }
-
     // Optimistic update: only succeeds if nobody answered this question in the meantime.
-    let res;
-    for (let tries = 0; tries < 3; tries++) {
-      try {
-        res = await db
-          .prepare("UPDATE attempts SET answers = ?, score = ?, finished_at = ?, first = ?, code = ? WHERE id = ? AND answers = ? AND finished_at IS NULL")
-          .bind(newAnswers, score, done ? now : null, first, code, a.id, a.answers)
-          .run();
-        break;
-      } catch (e) {
-        if (code && /UNIQUE/i.test(String(e))) { code = newCode(); continue; } // winner code collision: pick another
-        throw e;
-      }
-    }
+    const res = await db
+      .prepare("UPDATE attempts SET answers = ?, score = ?, finished_at = ? WHERE id = ? AND answers = ? AND finished_at IS NULL")
+      .bind(newAnswers, score, done ? now : null, a.id, a.answers)
+      .run();
     if (!res || !res.meta || res.meta.changes !== 1) return json({ error: "answer already recorded" }, 409);
 
     const out = { correct, answer: q.a[0], fact: q.f || "", done };
-    if (done) Object.assign(out, { score, total: a.total, first: !!first, code });
+    if (done) Object.assign(out, { score, total: a.total });
     return json(out);
   } catch (e) {
     return json({ error: "could not record answer" }, 500);

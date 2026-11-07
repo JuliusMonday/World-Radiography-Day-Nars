@@ -16,8 +16,8 @@ CREATE TABLE IF NOT EXISTS hits (ip TEXT NOT NULL, ts INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS hits_ip_ts ON hits(ip, ts);
 CREATE INDEX IF NOT EXISTS hits_ts ON hits(ts);
 
--- Quiz attempts, marked on the server. name/chapter are only filled for winning attempts (score 10/10 on a
--- device's first finished attempt) when the winner downloads their card, so NARS can confirm prizes.
+-- Quiz attempts, marked on the server. code, name, chapter and chapter_code are no longer used (prizes are run by
+-- NARS outside the site); the columns stay so older databases keep working.
 CREATE TABLE IF NOT EXISTS attempts (
   id TEXT PRIMARY KEY,
   device TEXT NOT NULL,
@@ -39,13 +39,3 @@ CREATE INDEX IF NOT EXISTS attempts_device ON attempts(device, finished_at);
 CREATE INDEX IF NOT EXISTS attempts_created ON attempts(created_at);
 CREATE UNIQUE INDEX IF NOT EXISTS attempts_code ON attempts(code);
 
--- Saved prize draws. picks = JSON list of {code, status} in the order drawn; status is pending, claimed or forfeit.
--- The first `prizes` picks that haven't forfeited hold the prize places; the rest are backups.
-CREATE TABLE IF NOT EXISTS draws (
-  id TEXT PRIMARY KEY,
-  created_at INTEGER NOT NULL,
-  prizes INTEGER NOT NULL,
-  settings TEXT NOT NULL,
-  pool INTEGER NOT NULL,
-  picks TEXT NOT NULL
-);
