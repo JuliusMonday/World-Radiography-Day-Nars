@@ -1454,6 +1454,8 @@ function celebrate(btn){confettiFrom(btn,100,2.4);toast("Saved. Share it with <b
 /* ---------- live counter and chapter ranking (Cloudflare Pages Functions + D1) ----------
    Shown only once the total passes STATS_MIN, so an early, small number never makes the site look empty.
    Add ?stats=1 to the URL to preview it before then. */
+/* chapter ranking is on hold until chapter names are standardised (see TODO.md) */
+var SHOW_RANKING=false;
 var STATS_MIN=100,statsForced=/[?&]stats=1\b/.test(location.search),stats=null,rankOpen=false,shownTotal=0;
 function chapterKey(raw){
   var STOP={NARS:1,CHAPTER:1,CHAP:1,THE:1,OF:1,STUDENT:1,STUDENTS:1,ASSOCIATION:1,NIGERIAN:1,RADIOGRAPHY:1,RADIOGRAPHERS:1};
@@ -1468,12 +1470,16 @@ function renderStats(){
   var box=$("live");if(!stats||!(stats.total>=STATS_MIN||statsForced)){box.hidden=true;$("rank").hidden=true;return;}
   box.hidden=false;countUp($("liveTotal"),stats.total);
   var top=stats.top&&stats.top[0];
-  $("liveLead").textContent=(top?top.name+" leads with "+fmtN(top.count):"")+(stats.radiographers?(top?" · ":"")+fmtN(stats.radiographers)+" radiographers":"");
+  var rads=stats.radiographers?fmtN(stats.radiographers)+(stats.radiographers===1?" radiographer":" radiographers"):"";
+  var lead=SHOW_RANKING&&top?top.name+" leads with "+fmtN(top.count):"";
+  $("liveLead").textContent=lead+(lead&&rads?" · ":"")+rads;
+  box.querySelector(".lsep").hidden=!$("liveLead").textContent;
+  $("liveMore").hidden=!SHOW_RANKING;
   var mine=ROLE==="pro"?"":chapterKey(current.title),max=top?top.count:1;
   $("rankList").innerHTML=(stats.top||[]).map(function(c,i){
     return '<li class="'+(c.name===mine?"me":"")+'" style="--p:'+Math.max(4,Math.round(c.count/max*100))+'%"><span class="rn">'+(i+1)+'</span><span class="rc">'+esc(c.name)+'</span><span class="rv2">'+fmtN(c.count)+"</span></li>";
   }).join("")||"<li><span></span><span class=\"rc\">No chapters yet</span><span></span></li>";
-  $("rank").hidden=!rankOpen;
+  $("rank").hidden=!(SHOW_RANKING&&rankOpen);
 }
 function loadStats(){
   if(!window.fetch)return;
