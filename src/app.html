@@ -965,7 +965,7 @@ var TIERS=[
   {min:0,t:"Keep learning",tp:"Time for a refresher",s:"Everyone starts somewhere. You still get your card.",sp:"Practice moves on, and a refresher never hurts. You still get your card.",line:"Still learning, always caring",lp:"Always learning, always caring"}
 ];
 var N_Q=10;
-var quiz={set:[],i:0,score:0,results:[],choices:[DEFAULT_LINE],picked:DEFAULT_LINE,done:ssGet("wrd-done")==="1"};
+var quiz={set:[],i:0,score:0,results:[],choices:[DEFAULT_LINE],picked:DEFAULT_LINE,done:ssGet("wrd-done")==="1",skipped:ssGet("wrd-skipped")==="1"};
 var qBody=$("qBody");
 function rnd(n){return Math.floor(Math.random()*n);}
 function shuffle(a){a=a.slice();for(var i=a.length-1;i>0;i--){var j=rnd(i+1),t=a[i];a[i]=a[j];a[j]=t;}return a;}
@@ -990,7 +990,7 @@ function pickSession(){
 }
 function openQuiz(direct){
   quizOpen=true;document.body.classList.add("locked");
-  $("qClose").classList.toggle("on",quiz.done);
+  $("qClose").classList.toggle("on",quiz.done||quiz.skipped);
   var o=$("quiz");o.classList.remove("closing");o.classList.add("on");
   if(direct)startQuiz();else showIntro();
 }
@@ -1022,17 +1022,31 @@ function showSkip(){
   qBody.innerHTML=stepHTML([
     '<p class="q-kicker">Hold on</p>',
     '<h2 id="qTitle">'+esc(SKIP_TITLES[rnd(SKIP_TITLES.length)])+"</h2>",
-    '<p class="q-sub">Everyone takes the quiz before making a card. Tell us why you want to skip.</p>',
-    '<div class="reasons">'+shuffle(REASONS).map(function(r){return '<button type="button" class="reason" data-reason="'+r.k+'"><span class="ico">'+icon(r.ic)+"</span>"+esc(r.t)+"</button>";}).join("")+"</div>"
+    '<p class="q-sub">Tell us why you want to skip. You can always take the quiz later while filling in your card.</p>',
+    '<div class="reasons">'+shuffle(REASONS).map(function(r){return '<button type="button" class="reason" data-reason="'+r.k+'"><span class="ico">'+icon(r.ic)+"</span>"+esc(r.t)+"</button>";}).join("")+"</div>",
+    '<div class="q-actions" style="margin-top:12px"><button class="btn quiet" data-act="intro" type="button">Back</button></div>'
   ]);focusFirst(".reason");
+}
+function defaultChoices(){
+  return ROLE==="pro"
+    ? ["Proudly a Radiographer", PRO_EXTRA, "Still sharp, still learning", "Always learning, always caring"]
+    : ["Proudly a Student Radiographer", "Radiographer in the making", "Still learning, always caring"];
+}
+function skipQuiz(){
+  quiz.skipped=true;ssSet("wrd-skipped","1");
+  if(!quiz.choices||quiz.choices.length<=1){quiz.choices=defaultChoices();quiz.picked=DEFAULT_LINE;}
+  updateQuizBtn();
+  closeQuiz();
+  renderQuoteChips();
+  toast("You can take the 10-question quiz anytime under Step 3 to unlock more flyer lines.","award",5000);
 }
 function showReply(k){
   var r=REASONS.filter(function(x){return x.k===k;})[0];hostSay(k==="proud"?"cheer":"think");
   qBody.innerHTML=stepHTML([
     '<p class="q-kicker">Fair enough</p>',
-    '<h2 id="qTitle">Let’s do it anyway</h2>',
+    '<h2 id="qTitle">Ready when you are</h2>',
     '<p class="reply">'+esc(r.r[rnd(r.r.length)])+"</p>",
-    '<div class="q-actions"><button class="btn primary" data-act="start" type="button">Start the quiz'+icon("arrow")+"</button></div>"
+    '<div class="q-actions"><button class="btn primary" data-act="start" type="button">Start the quiz'+icon("arrow")+'</button><button class="btn quiet" data-act="skiptoform" type="button">Skip to card maker</button></div>'
   ]);focusFirst("[data-act=start]");
 }
 function startQuiz(){quiz.set=pickSession();quiz.i=0;quiz.score=0;quiz.results=[];quiz.picks=[];showQuestion();}
@@ -1115,8 +1129,9 @@ function pickLine(l){
   $("linePrev").textContent=l;
 }
 function finishQuiz(){
-  quiz.done=true;ssSet("wrd-done","1");
+  quiz.done=true;quiz.skipped=false;ssSet("wrd-done","1");ssSet("wrd-skipped","0");
   lsSet("wrd-lines",JSON.stringify({choices:quiz.choices,picked:quiz.picked}));
+  updateQuizBtn();
   closeQuiz();
   setTimeout(function(){setQuote(quiz.picked);},500);
 }
@@ -1129,6 +1144,8 @@ qBody.addEventListener("click",function(e){
   var act=b.getAttribute("data-act");
   if(act==="start"||act==="again")startQuiz();
   else if(act==="skip")showSkip();
+  else if(act==="intro")showIntro();
+  else if(act==="skiptoform")skipQuiz();
   else if(act==="next"){quiz.i++;if(quiz.i<quiz.set.length)showQuestion();else showResult();}
   else if(act==="done"){confettiFrom(b,50,2);finishQuiz();}
   else if(act==="sharescore")shareScore(b);
@@ -1206,10 +1223,10 @@ function shareScore(btn){
     toast("Score image saved. The caption and link are copied, so just paste them in your post.","check",5200);
   });
 }
-$("qClose").addEventListener("click",function(){if(quiz.done)closeQuiz();});
+$("qClose").addEventListener("click",function(){if(quiz.done||quiz.skipped)closeQuiz();});
 document.addEventListener("keydown",function(e){
   if(!quizOpen)return;
-  if(e.key==="Escape"){if(quiz.done)closeQuiz();return;}
+  if(e.key==="Escape"){if(quiz.done||quiz.skipped)closeQuiz();return;}
   if(e.target&&e.target.tagName==="INPUT")return;
   var k=e.key.toUpperCase(),i="ABCD".indexOf(k);if(i<0)i="1234".indexOf(k);
   if(i>=0&&k.length===1){var b=qBody.querySelector('.opt[data-opt="'+i+'"]:not([disabled])');if(b)b.click();}
@@ -1257,9 +1274,18 @@ function setQuote(l){
   lsSet("wrd-lines",JSON.stringify({choices:quiz.choices,picked:l}));
 }
 $("quoteChips").addEventListener("click",function(e){var b=e.target.closest("button");if(b)setQuote(b.getAttribute("data-line"));});
+function updateQuizBtn(){
+  var b=$("retake");if(!b)return;
+  if(quiz.done){
+    b.innerHTML=icon("refresh")+"Retake the quiz with new questions";
+  }else{
+    b.innerHTML=icon("award")+"Take the 10-question Radiographer Check";
+  }
+}
 $("retake").addEventListener("click",function(){openQuiz(true);});
 $("shareScoreLink").addEventListener("click",function(){shareScore(this);});
 updateScoreLink();
+updateQuizBtn();
 
 /* ---------- text fields ---------- */
 function clearErr(id){var i=$(id);i.removeAttribute("aria-invalid");$(id+"Err").hidden=true;}
@@ -1505,6 +1531,7 @@ $("share").addEventListener("click",function(){
 /* ---------- boot ---------- */
 var saved=null;try{saved=JSON.parse(lsGet("wrd-lines")||"null");}catch(e){}
 if(saved&&saved.choices&&saved.choices.length){quiz.choices=saved.choices;quiz.picked=saved.picked||saved.choices[0];current.quote=delivered.quote=quiz.picked;}
+else if(quiz.skipped){quiz.choices=defaultChoices();quiz.picked=DEFAULT_LINE;}
 current.quote=delivered.quote=fitLinesToRole();applyRoleUI();
 renderQuoteChips();setAnim(animOn);afterDeliver();enableZoom(false);
 if(document.fonts&&document.fonts.ready)document.fonts.ready.then(function(){dirty=true;});
@@ -1512,7 +1539,8 @@ requestAnimationFrame(frame);
 function start(){
   document.body.classList.add("ready");document.body.classList.remove("locked");
   appStarted=true;if(animOn){sk.x=-170;sk.state="enter";}else sk.state="idle";
-  if(!quiz.done)setTimeout(function(){openQuiz(false);},500);
+  if(!quiz.done&&!quiz.skipped)setTimeout(function(){openQuiz(false);},500);
+  updateQuizBtn();
 }
 BG.onload=function(){bgReady=true;dirty=true;PL.ready(start);};
 BG.onerror=function(){PL.ready(start);};
