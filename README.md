@@ -24,7 +24,8 @@ Developed by [Jutelabs Limited](https://www.linkedin.com/in/chimaobi-julius-mond
 ## How the quiz works
 
 - The page asks the API for 10 questions (no answers included); each answer is marked by the server.
-- The site doesn't run prizes or store names. NARS handles 10/10 prizes on its own WhatsApp platform; the admin page shows how many perfect scores there were.
+- A 10/10 score gets a check code like `WRD-7K3QX`, shown on the result screen and the score image.
+- NARS gives prizes on WhatsApp. The PRO types the code into the admin page to see if it's real, then marks it as claimed so the same screenshot can't win twice. No names are stored.
 
 ## Admin access
 

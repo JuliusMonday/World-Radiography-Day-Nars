@@ -10,7 +10,7 @@
 - [x] Fixed "1 radiographers"
 - [x] Private `/admin` page: totals, students vs radiographers, quiz numbers, cards per day, chapters, CSV export
 - [x] Server-side marking (the page never gets the answers)
-- [x] Prizes removed from the site: NARS runs 10/10 prizes on WhatsApp
+- [x] Prizes run by NARS on WhatsApp; 10/10 check codes let the PRO spot fake screenshots and mark prizes as claimed
 
 ## Needs doing in the Cloudflare dashboard
 

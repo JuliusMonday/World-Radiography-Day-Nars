@@ -58,6 +58,14 @@ tr.zero td{color:#9aa6b2}
 .muted{color:var(--muted)}
 .note{font-size:13px;color:var(--muted);margin:10px 0 0}
 .scroll{overflow:auto}
+.check{border:2px solid var(--navy)}
+.check .tools input{font:800 18px ui-monospace,Consolas,monospace;letter-spacing:.06em;text-transform:uppercase;min-width:200px}
+.ck{margin-top:6px;padding:14px 16px;border-radius:12px;line-height:1.55}
+.ck b.big{display:block;font:900 20px var(--head)}
+.ck.ok{background:var(--green-tint);border:1px solid #cfe8c6}
+.ck.warn{background:#fff8d6;border:1px solid #f0dc7a}
+.ck.bad{background:var(--red-tint);border:1px solid #f3c7c7;color:var(--red)}
+.ck .btn{margin-top:10px}
 [hidden]{display:none!important}
 </style>
 </head>
@@ -80,6 +88,13 @@ tr.zero td{color:#9aa6b2}
       <div><h1>WRD 2026 Admin</h1><small><span id="updated">Loading…</span></small></div>
       <div class="tools" style="margin:0"><button class="btn quiet" id="refresh" type="button">Refresh</button><button class="btn quiet" id="signOut" type="button">Sign out</button></div>
     </div>
+
+    <section class="panel check">
+      <h2>Check a 10/10 code</h2>
+      <p class="muted" style="margin-top:0">Type the code from the result screen or score image someone posts on WhatsApp. A fake or edited screenshot won't have a real code.</p>
+      <div class="tools"><input type="text" id="ckCode" placeholder="WRD-7K3QX" aria-label="Check code" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="12"><button class="btn navy" id="ckBtn" type="button">Check code</button></div>
+      <div id="ckOut" aria-live="polite"></div>
+    </section>
 
     <div class="stats" id="stats"></div>
 
@@ -157,7 +172,7 @@ function render(){
   var s=data.summary,c=s.cards,q=s.quiz;
   $("stats").innerHTML=[
     ["Cards made",c.total,"hl"],["Students",c.students],["Radiographers",c.radiographers],["Pending names",c.pending],
-    ["Quizzes started",q.started],["Quizzes finished",q.finished],["Average score",q.avg_score==null?"–":q.avg_score+"/10"],["Perfect scores (10/10)",q.perfect,"hl"]
+    ["Quizzes started",q.started],["Quizzes finished",q.finished],["Average score",q.avg_score==null?"–":q.avg_score+"/10"],["Perfect scores (10/10)",q.perfect,"hl"],["Prizes claimed",q.claimed]
   ].map(function(x){return '<div class="stat '+(x[2]||"")+'"><b>'+(typeof x[1]==="number"?n(x[1]):esc(x[1]))+"</b><span>"+esc(x[0])+"</span></div>";}).join("");
   renderChapters();renderPending();renderDays();
 }
@@ -208,6 +223,33 @@ $("pdBody").addEventListener("click",function(e){
     b.disabled=true;api("discard",{method:"POST",body:JSON.stringify({key:p.key})}).then(load).catch(function(err){alert(err.message);b.disabled=false;});
   }
 });
+// ---- check a 10/10 code ----
+function showCheck(r){
+  var o=$("ckOut");
+  if(!r.valid){o.innerHTML='<div class="ck bad"><b class="big">Not a real code</b>'+esc(r.code||"")+" isn't a 10/10 code from this site. The screenshot may be fake or edited, or the code was typed wrongly.</div>";return;}
+  var facts="Scored "+r.score+"/"+r.total+" as a "+(r.role==="pro"?"radiographer":"student")+" · finished "+when(r.finished_at)+" · took "+dur(r.seconds)+" · "+(r.attempt_no<=1?"first quiz on that phone":"quiz number "+r.attempt_no+" on that phone");
+  var fast=r.seconds<40?'<br><b>Very fast.</b> You may want to ask them one quiz question before giving a prize.':"";
+  if(r.claimed_at){o.innerHTML='<div class="ck warn"><b class="big">Already claimed</b>This code was marked as claimed on '+when(r.claimed_at)+". Don't give a second prize for it.<br>"+esc(facts)+'<br><button class="btn quiet" id="ckUndo" type="button">Undo claim</button></div>';return;}
+  o.innerHTML='<div class="ck ok"><b class="big">Valid: '+esc(r.code)+"</b>"+esc(facts)+fast+'<br><button class="btn primary" id="ckClaim" type="button">Mark as claimed (prize given)</button></div>';
+}
+function checkCode(){
+  var c=$("ckCode").value.trim();if(!c){$("ckCode").focus();return;}
+  $("ckOut").innerHTML='<p class="muted">Checking…</p>';
+  api("check?code="+encodeURIComponent(c)).then(showCheck).catch(function(e){
+    if(e.status===404)showCheck({valid:false,code:c.toUpperCase()});else $("ckOut").innerHTML='<div class="ck bad">'+esc(e.message)+"</div>";
+  });
+}
+$("ckBtn").addEventListener("click",checkCode);
+$("ckCode").addEventListener("keydown",function(e){if(e.key==="Enter")checkCode();});
+$("ckOut").addEventListener("click",function(e){
+  var b=e.target.closest("button");if(!b)return;
+  var undo=b.id==="ckUndo";
+  if(undo&&!confirm("Undo the claim? The code can then be claimed again."))return;
+  b.disabled=true;
+  api("claim",{method:"POST",body:JSON.stringify({code:$("ckCode").value.trim(),undo:undo})}).then(function(){checkCode();load();})
+    .catch(function(err){if(err.status===409)checkCode();else{alert(err.message);b.disabled=false;}});
+});
+
 $("csvChapters").addEventListener("click",function(){csv("wrd2026-chapters.csv",[["Code","University","State","Status","Cards"]].concat(data.chapters.official.map(function(r){return [r.code,r.name,r.state,r.accredited?"Accredited":"Not accredited",r.count];})));});
 $("csvPending").addEventListener("click",function(){csv("wrd2026-pending-names.csv",[["Typed name","Cards"]].concat(data.chapters.pending.map(function(p){return [p.name,p.count];})));});
 

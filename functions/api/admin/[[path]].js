@@ -4,8 +4,10 @@
 //   GET  /api/admin/chapters         official chapters with counts, pending names, learned spellings
 //   POST /api/admin/merge {from,to}  move a pending name into an official chapter and remember the spelling
 //   POST /api/admin/discard {key}    delete a junk pending name
+//   GET  /api/admin/check?code=      check a 10/10 code from someone's result or share image
+//   POST /api/admin/claim {code,undo} mark a code as claimed (prize given), or undo that
 import { checkAdmin } from "../../../lib/adminauth.js";
-import { CHAPTERS, CHAPTER_BY_CODE, PENDING, PRO_KEY, json, readBody } from "../../../lib/counter.js";
+import { CHAPTERS, CHAPTER_BY_CODE, PENDING, PRO_KEY, cleanCode, json, readBody } from "../../../lib/counter.js";
 
 const DAY = 86400e3;
 const WAT = 3600e3; // Nigeria is UTC+1: group by Nigerian calendar day
@@ -21,7 +23,7 @@ async function summary(db) {
       .bind(PRO_KEY, PENDING),
     db.prepare(
       "SELECT COUNT(*) AS started, COUNT(finished_at) AS finished, AVG(CASE WHEN finished_at IS NOT NULL THEN score END) AS avg_score, " +
-        "COUNT(CASE WHEN finished_at IS NOT NULL AND score = total THEN 1 END) AS perfect FROM attempts"
+        "COUNT(CASE WHEN finished_at IS NOT NULL AND score = total THEN 1 END) AS perfect, COUNT(claimed_at) AS claimed FROM attempts"
     ),
     db
       .prepare("SELECT CAST((ts + ?) / ? AS INTEGER) AS d, COUNT(*) AS n FROM card_log WHERE ts > ? GROUP BY d ORDER BY d")
@@ -80,7 +82,39 @@ async function discard(db, body) {
   return json({ ok: true, removed: res.meta.changes });
 }
 
-const POSTS = { merge, discard };
+async function checkCode(db, url) {
+  const code = cleanCode(url.searchParams.get("code"));
+  if (!code) return json({ error: "Codes look like WRD-7K3QX." }, 400);
+  const a = await db
+    .prepare("SELECT code, device, role, score, total, created_at, finished_at, claimed_at FROM attempts WHERE code = ?")
+    .bind(code)
+    .first();
+  if (!a) return json({ valid: false, code }, 404);
+  const n = await db
+    .prepare("SELECT COUNT(*) AS n FROM attempts WHERE device = ? AND finished_at IS NOT NULL AND finished_at <= ?")
+    .bind(a.device, a.finished_at)
+    .first();
+  return json({
+    valid: true, code, role: a.role, score: a.score, total: a.total, finished_at: a.finished_at,
+    seconds: Math.round((a.finished_at - a.created_at) / 1000), attempt_no: n.n, claimed_at: a.claimed_at,
+  });
+}
+
+async function claim(db, body) {
+  const code = cleanCode(body.code);
+  if (!code) return json({ error: "Codes look like WRD-7K3QX." }, 400);
+  if (body.undo === true) {
+    const r = await db.prepare("UPDATE attempts SET claimed_at = NULL WHERE code = ?").bind(code).run();
+    return r.meta.changes ? json({ ok: true, claimed_at: null }) : json({ error: "Not a real code." }, 404);
+  }
+  const now = Date.now();
+  const r = await db.prepare("UPDATE attempts SET claimed_at = ? WHERE code = ? AND claimed_at IS NULL").bind(now, code).run();
+  if (r.meta.changes) return json({ ok: true, claimed_at: now });
+  const a = await db.prepare("SELECT claimed_at FROM attempts WHERE code = ?").bind(code).first();
+  return a ? json({ error: "Already claimed.", claimed_at: a.claimed_at }, 409) : json({ error: "Not a real code." }, 404);
+}
+
+const POSTS = { merge, discard, claim };
 
 export async function onRequest({ request, env, params }) {
   if (!env.DB) return json({ error: "database not configured" }, 503);
@@ -97,6 +131,7 @@ export async function onRequest({ request, env, params }) {
     if (method === "GET" && route === "me") return json({ ok: true });
     if (method === "GET" && route === "summary") return json(await summary(db));
     if (method === "GET" && route === "chapters") return json(await chapters(db));
+    if (method === "GET" && route === "check") return await checkCode(db, new URL(request.url));
     if (method === "POST" && Object.hasOwn(POSTS, route)) {
       const body = await readBody(request);
       if (!body) return json({ error: "invalid request" }, 400);

@@ -231,6 +231,10 @@ body.ready .reveal{animation:up .6s cubic-bezier(.2,.8,.2,1) forwards}
 .chhint{margin:6px 0 0;font-size:13px;color:var(--muted)}
 .chhint.ok{color:var(--green-d);font-weight:600}
 .chhint.warn{color:#8a6d00}
+.wincode{margin:4px 0 14px;padding:14px 16px;border-radius:14px;background:#fff8d6;border:1.5px solid #f0dc7a}
+.wincode span{display:block;font:800 12px var(--head);letter-spacing:.06em;text-transform:uppercase;color:#7a6200}
+.wincode b{display:block;font:900 26px ui-monospace,Consolas,monospace;letter-spacing:.06em;margin:2px 0 4px}
+.wincode small{display:block;font-size:13px;color:#5d5130;line-height:1.45}
 .q-note{font-size:13px;color:var(--muted);margin:-4px 0 12px}
 .roleseg{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;margin:0 0 16px;background:#eef1ec;border-radius:12px}
 .roleseg button{border:0;background:transparent;padding:10px 8px;border-radius:9px;font:700 14px var(--head);color:var(--muted);cursor:pointer;transition:background .15s,color .15s,box-shadow .15s}
@@ -1075,7 +1079,7 @@ function showReply(k){
   ]);focusFirst("[data-act=start]");
 }
 function startQuiz(){
-  quiz.set=[];quiz.i=0;quiz.score=0;quiz.results=[];quiz.picks=[];quiz.attempt="";quiz.busy=false;
+  quiz.set=[];quiz.i=0;quiz.score=0;quiz.results=[];quiz.picks=[];quiz.attempt="";quiz.code=null;quiz.busy=false;
   hostSay("think");
   qBody.innerHTML=stepHTML(['<p class="q-kicker">Radiographer check</p>','<h2 id="qTitle">Getting your questions…</h2>','<p class="q-sub">Picking 10 fresh questions for you.</p>']);
   var seen=(lsGet("wrd-seen")||"").split(",").filter(Boolean);
@@ -1114,7 +1118,7 @@ function answer(i,btn){
     Array.prototype.forEach.call(btns,function(b,j){b.classList.remove("picked");if(quiz.opts[j].t===d.answer)b.classList.add("right");else if(j!==i)b.classList.add("dim");});
     if(!ok)btn.classList.add("wrong");
     quiz.results[idx]=ok;quiz.picks[idx]=choice;if(ok)quiz.score++;
-    if(d.done)quiz.score=d.score;
+    if(d.done){quiz.score=d.score;quiz.code=d.code||null;}
     if(ok){confettiFrom(btn,30,1.4);hostSay("cheer");}else hostSay("shake");
     var lastQ=idx===quiz.set.length-1;
     after.innerHTML='<div class="q-fact '+(ok?"ok":"no")+'">'+icon(ok?"check":"info")+"<span><b>"+(ok?"Correct.":"The answer is "+esc(d.answer)+".")+"</b> "+esc(d.fact||"")+'</span></div><div class="q-actions"><button class="btn primary" data-act="next" type="button">'+(lastQ?"See my result":"Next question")+icon("arrow")+"</button></div>";
@@ -1144,13 +1148,14 @@ function showResult(again){
   qBody.innerHTML=stepHTML([
     '<div class="score"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="44" fill="none" stroke="#eef1ec" stroke-width="10"/><circle class="ringfg" cx="50" cy="50" r="44" fill="none" stroke-width="10" stroke-linecap="round" transform="rotate(-90 50 50)" stroke-dasharray="'+C.toFixed(1)+'" stroke-dashoffset="'+C.toFixed(1)+'"/><text x="50" y="57" text-anchor="middle" font-family="Montserrat,sans-serif" font-weight="900" font-size="22" fill="#0b1f3a">'+quiz.score+"/"+n+'</text></svg><div><p class="q-kicker" style="margin:0">Your result</p><h2 id="qTitle" style="margin:2px 0 0">'+esc(tr.t)+"</h2></div></div>",
     '<p class="q-sub" style="margin-bottom:12px">'+esc(tr.s)+"</p>",
+    codeHTML(),
     '<label class="f">Pick the line for your flyer</label>',
     '<div class="chips" id="resChips">'+quiz.choices.map(function(l,i){return '<button type="button" class="chip'+(l===quiz.picked?" on":"")+'" data-line="'+esc(l)+'">'+esc(l)+"</button>";}).join("")+"</div>",
     '<div class="lineprev" id="linePrev">'+esc(quiz.picked)+"</div>",
     '<div class="q-actions"><button class="btn primary" data-act="done" type="button">Make my card'+icon("arrow")+'</button><button class="btn outline" data-act="sharescore" type="button">'+icon("share")+'Share my score</button><button class="btn quiet" data-act="review" type="button">'+icon("check")+'Review answers</button><button class="btn quiet" data-act="again" type="button">'+icon("refresh")+"New questions</button></div>"
   ]);
   if(!again){
-    lastScore={score:quiz.score,n:n,t:tr.t};lsSet("wrd-score",JSON.stringify(lastScore));updateScoreLink();
+    lastScore={score:quiz.score,n:n,t:tr.t,code:quiz.code||null};lsSet("wrd-score",JSON.stringify(lastScore));updateScoreLink();
   }
   var ring=qBody.querySelector(".ringfg");ring.setAttribute("stroke",quiz.score>=6?"#188e00":quiz.score>=3?"#0b1f3a":"#c62828");
   setTimeout(function(){ring.style.strokeDashoffset=(C*(1-quiz.score/n)).toFixed(1);},100);
@@ -1158,6 +1163,11 @@ function showResult(again){
   else if(quiz.score===n){hostSay("party");setTimeout(function(){confetti(innerWidth/2,innerHeight*.35,150,3.4);},300);}
   else hostSay(quiz.score>=5?"cheer":"idle");
   focusFirst("[data-act=done]");
+}
+/* 10/10 check code on the result screen */
+function codeHTML(){
+  if(!quiz.code)return "";
+  return '<div class="wincode"><span>Your 10/10 check code</span><b>'+esc(quiz.code)+'</b><small>Keep this code. It is also on your score image, so NARS can confirm your 10/10 when you share it on WhatsApp.</small></div>';
 }
 function showReview(){
   hostSay("idle");
@@ -1245,8 +1255,9 @@ function makeScoreBlob(s){
     x.fillStyle="#b9c7d8";x.font="600 34px "+FONT;
     var who=current.name?current.name+" scored "+s.score+" out of "+s.n:"I scored "+s.score+" out of "+s.n;
     wrapLines(x,who+" on the Radiographer Check for World Radiography Day 2026.",900).forEach(function(l,i){x.fillText(l,540,940+i*48);});
+    if(s.code){x.fillStyle="#f4cd01";x.font="800 30px "+FONT;x.fillText("10/10 check code: "+s.code,540,1046);}
     // challenge pill
-    var py=1076;
+    var py=s.code?1086:1076;
     rr(x,250,py,580,100,50);x.fillStyle="#188e00";x.fill();
     x.fillStyle="#fff";x.font="800 38px "+FONT;x.fillText("Can you beat my score?",540,py+64);
     x.fillStyle="#8fa3ba";x.font="600 28px "+FONT;x.fillText(SITE_URL.replace("https://",""),540,1240);
