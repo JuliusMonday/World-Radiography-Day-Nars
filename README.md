@@ -12,7 +12,8 @@ Developed by [Jutelabs Limited](https://www.linkedin.com/in/chimaobi-julius-mond
 | `src/questions.js` | Question bank (hand-written and generated calculation questions) |
 | `src/flyer-bg.jpg` | Clean 2160 × 2700 flyer background |
 | `src/nars-logo.jpg` | NARS logo used in the quiz |
-| `src/build.py` | Builds the single-file site |
+| `src/public/` | Link preview image (`og.jpg`), favicons and web manifest, copied into the site as is |
+| `src/build.py` | Builds the site into `site/` |
 | `world Radiography day.svg` / `.png` | Original flyer design files |
 
 ## Build

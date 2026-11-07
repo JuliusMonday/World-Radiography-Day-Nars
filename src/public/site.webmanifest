@@ -1,0 +1,13 @@
+{
+  "name": "World Radiography Day 2026 Card",
+  "short_name": "WRD 2026",
+  "description": "NARS National: take the Radiographer Check and make your World Radiography Day 2026 card.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f6f3",
+  "theme_color": "#0b1f3a",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
