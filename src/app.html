@@ -184,6 +184,7 @@ input[aria-invalid=true]{border-color:var(--red);box-shadow:0 0 0 4px rgba(198,4
 .opt[disabled]{cursor:default}
 .opt.right{border-color:var(--green);background:var(--green-tint)}
 .opt.right .key{background:var(--green);color:#fff}
+.opt.picked{border-color:var(--navy);background:#f1f3f6}
 .opt.wrong{border-color:var(--red);background:var(--red-tint);animation:shake .4s}
 .opt.wrong .key{background:var(--red);color:#fff}
 .opt.dim{opacity:.5}
@@ -220,6 +221,21 @@ body.ready .reveal{animation:up .6s cubic-bezier(.2,.8,.2,1) forwards}
 
 .foot{margin-top:28px}
 .linkrow{display:flex;flex-wrap:wrap;gap:6px 22px}
+.combo{position:relative}
+.chlist{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:20;margin:0;padding:6px;list-style:none;background:#fff;border:1.5px solid #cfd6cc;border-radius:12px;box-shadow:0 14px 30px -12px rgba(11,31,58,.35);max-height:290px;overflow:auto}
+.chlist li{display:flex;gap:10px;align-items:baseline;padding:9px 10px;border-radius:8px;cursor:pointer;font-size:14px}
+.chlist li b{font:800 13px var(--head);min-width:74px}
+.chlist li span{color:var(--muted)}
+.chlist li[aria-selected=true],.chlist li:hover{background:var(--green-tint)}
+.chlist li.none{cursor:default;color:var(--muted)}.chlist li.none:hover{background:none}
+.chhint{margin:6px 0 0;font-size:13px;color:var(--muted)}
+.chhint.ok{color:var(--green-d);font-weight:600}
+.chhint.warn{color:#8a6d00}
+.wincode{margin:4px 0 14px;padding:14px 16px;border-radius:14px;background:#fff8d6;border:1.5px solid #f0dc7a}
+.wincode span{display:block;font:800 12px var(--head);letter-spacing:.06em;text-transform:uppercase;color:#7a6200}
+.wincode b{display:block;font:900 26px ui-monospace,Consolas,monospace;letter-spacing:.06em;margin:2px 0 4px}
+.wincode small{display:block;font-size:13px;color:#5d5130;line-height:1.45}
+.q-note{font-size:13px;color:var(--muted);margin:-4px 0 12px}
 .roleseg{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;margin:0 0 16px;background:#eef1ec;border-radius:12px}
 .roleseg button{border:0;background:transparent;padding:10px 8px;border-radius:9px;font:700 14px var(--head);color:var(--muted);cursor:pointer;transition:background .15s,color .15s,box-shadow .15s}
 .roleseg button[aria-checked=true]{background:#fff;color:var(--navy);box-shadow:0 1px 3px rgba(11,31,58,.18)}
@@ -237,6 +253,7 @@ body.ready .reveal{animation:up .6s cubic-bezier(.2,.8,.2,1) forwards}
 .rank li.me{box-shadow:inset 0 0 0 1.5px var(--green);color:var(--green-d);font-weight:700}
 .rank .rn{font:800 13px var(--head);color:var(--muted)}
 .rank .rv2{font-weight:700;font-variant-numeric:tabular-nums}
+.rank .rfull{color:var(--muted);font-weight:400;font-size:12px;margin-left:4px}
 .linkbtn[hidden]{display:none}
 
 /* desktop: the page fits the window; the card stays in view and only the form column scrolls */
@@ -475,7 +492,11 @@ var PL=(function(){
           </div>
           <div class="field">
             <label class="f" for="title"><span id="titleLabel">Institution or chapter</span> <em aria-hidden="true">*</em></label>
-            <input type="text" id="title" maxlength="48" autocomplete="organization" placeholder="NARS UNIZIK CHAPTER" required aria-describedby="titleErr">
+            <div class="combo">
+              <input type="text" id="title" maxlength="48" autocomplete="off" placeholder="NARS UNIZIK CHAPTER" required aria-describedby="titleErr chHint" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="chList">
+              <ul class="chlist" id="chList" role="listbox" hidden></ul>
+            </div>
+            <p class="chhint" id="chHint"></p>
             <p class="err" id="titleErr" hidden>Enter your institution or chapter.</p>
           </div>
           </div>
@@ -581,7 +602,9 @@ var PL=(function(){
 <canvas id="confetti" aria-hidden="true"></canvas>
 
 <script>
-__QUESTIONS__
+/* official chapter list (RRBN, June 2026) and the shared chapter matcher (lib/match.js) */
+window.WRD_CHAPTERS=__CHAPTERS__;
+__MATCH__
 </script>
 <script>window.NARS_LOGO="__LOGO__";window.WRD_BG="__BG__";</script>
 <script>
@@ -952,9 +975,20 @@ function confettiFrom(elm,n,spread){var r=elm.getBoundingClientRect();confetti(r
 var toastT;function toast(html,ic,ms){var t=$("toast");t.innerHTML=(ic?icon(ic):"")+"<span>"+html+"</span>";t.classList.add("on");clearTimeout(toastT);toastT=setTimeout(function(){t.classList.remove("on");},ms||3600);}
 
 /* ================= RADIOGRAPHER QUIZ ================= */
-var BANK=window.WRD_BANK||[];
-var FACT_CATS=["history","protection","physics","anatomy","positioning","modalities","contrast","digital","care"];
-var CALC_CATS=[];BANK.forEach(function(q){if(q.cat.indexOf("calc-")===0&&CALC_CATS.indexOf(q.cat)<0)CALC_CATS.push(q.cat);});
+/* Questions come from the server without answers; each answer is marked by /api/quiz/answer. */
+var DEVICE=(function(){
+  var d=lsGet("wrd-device");
+  if(!/^[A-Za-z0-9_-]{8,64}$/.test(d||"")){
+    var a=new Uint8Array(12);(window.crypto||window.msCrypto).getRandomValues(a);
+    d=Array.prototype.map.call(a,function(b){return ("0"+b.toString(16)).slice(-2);}).join("");lsSet("wrd-device",d);
+  }
+  return d;
+})();
+function postJSON(url,body){
+  return fetch(url,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)}).then(function(r){
+    return r.json().catch(function(){return {};}).then(function(j){if(!r.ok){var e=new Error(j.error||"request failed");e.status=r.status;throw e;}return j;});
+  });
+}
 var CAT_NAME={history:"History and profession",protection:"Radiation protection",physics:"Physics",anatomy:"Anatomy",positioning:"Positioning",modalities:"Imaging modalities",contrast:"Contrast studies",digital:"Digital imaging",care:"Patient care"};
 var CAT_LINE={history:"Seeing the unseen since 1895",protection:"Low dose, high care. Always.",physics:"I speak fluent kVp and mAs",anatomy:"I see right through you, with care",positioning:"Breathe in… hold it… perfect!",modalities:"Every image tells a patient’s story",contrast:"Clear images, careful hands",digital:"Pixels, precision, patient care",care:"Patient care in every exposure","calc-isl":"Distance is my favourite shield","calc-dm":"Distance is my favourite shield",calc:"I do the maths behind the image"};
 var TIERS=[
@@ -971,22 +1005,17 @@ function rnd(n){return Math.floor(Math.random()*n);}
 function shuffle(a){a=a.slice();for(var i=a.length-1;i>0;i--){var j=rnd(i+1),t=a[i];a[i]=a[j];a[j]=t;}return a;}
 function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];});}
 function stepHTML(parts){return '<div class="q-step">'+parts.map(function(p,i){return p.replace(/^<(\w+)/,'<$1 style="--i:'+i+'"');}).join("")+"</div>";}
-function pickSession(){
-  var seen={};(lsGet("wrd-seen")||"").split(",").forEach(function(id){if(id)seen[id]=1;});
-  var byCat={};BANK.forEach(function(q){(byCat[q.cat]=byCat[q.cat]||[]).push(q);});
-  /* every quiz: 3 patient care, 1 each of protection, positioning, anatomy and history,
-     2 of imaging/contrast/digital, and at most 1 physics or calculation question */
-  var cats=["care","care","care","protection","positioning","anatomy","history"]
-    .concat(shuffle(["modalities","contrast","digital"]).slice(0,2))
-    .concat([Math.random()<.5?"physics":shuffle(CALC_CATS)[0]]),out=[];
-  cats.forEach(function(c){
-    var all=byCat[c]||[],pool=all.filter(function(q){return !seen[q.id];});
-    if(!pool.length){all.forEach(function(q){delete seen[q.id];});pool=all;}
-    var q=pool[rnd(pool.length)];if(q){out.push(q);seen[q.id]=1;}
-  });
-  var ids=Object.keys(seen);if(ids.length>700)ids=ids.slice(ids.length-700);
-  lsSet("wrd-seen",ids.join(","));
-  return shuffle(out).slice(0,N_Q);
+function quizError(title,retryAct,status){
+  hostSay("shake");
+  var sub=status===429?"Lots of quizzes are being started from your network. Please try again in a few minutes."
+    :status===410?"This quiz has expired. Start a new one with fresh questions."
+    :"Check your internet connection and try again. You can still make your card without the quiz.";
+  qBody.innerHTML=stepHTML([
+    '<p class="q-kicker">Something went wrong</p>',
+    '<h2 id="qTitle">'+esc(title)+"</h2>",
+    '<p class="q-sub">'+sub+"</p>",
+    '<div class="q-actions"><button class="btn primary" data-act="'+retryAct+'" type="button">'+(retryAct==="start"?"Try again":"Start a new quiz")+'</button><button class="btn quiet" data-act="skiptoform" type="button">Skip to card maker</button></div>'
+  ]);focusFirst("[data-act="+retryAct+"]");
 }
 function openQuiz(direct){
   quizOpen=true;document.body.classList.add("locked");
@@ -1049,14 +1078,25 @@ function showReply(k){
     '<div class="q-actions"><button class="btn primary" data-act="start" type="button">Start the quiz'+icon("arrow")+'</button><button class="btn quiet" data-act="skiptoform" type="button">Skip to card maker</button></div>'
   ]);focusFirst("[data-act=start]");
 }
-function startQuiz(){quiz.set=pickSession();quiz.i=0;quiz.score=0;quiz.results=[];quiz.picks=[];showQuestion();}
+function startQuiz(){
+  quiz.set=[];quiz.i=0;quiz.score=0;quiz.results=[];quiz.picks=[];quiz.attempt="";quiz.code=null;quiz.first=false;quiz.busy=false;
+  hostSay("think");
+  qBody.innerHTML=stepHTML(['<p class="q-kicker">Radiographer check</p>','<h2 id="qTitle">Getting your questions…</h2>','<p class="q-sub">Picking 10 fresh questions for you.</p>']);
+  var seen=(lsGet("wrd-seen")||"").split(",").filter(Boolean);
+  postJSON("/api/quiz/start",{role:ROLE,device:DEVICE,seen:seen.slice(-400)}).then(function(d){
+    if(!d||!d.attempt||!d.questions||!d.questions.length)throw new Error("no questions");
+    quiz.attempt=d.attempt;quiz.set=d.questions;
+    d.questions.forEach(function(q){seen.push(q.id);});lsSet("wrd-seen",seen.slice(-700).join(","));
+    showQuestion();
+  }).catch(function(e){quizError("We couldn’t load the questions","start",e.status);});
+}
 function topHTML(){
   var h='<div class="q-top"><div class="q-bar">';
   for(var i=0;i<quiz.set.length;i++){var r=quiz.results[i];h+='<span class="'+(r===true?"done":r===false?"miss":i===quiz.i?"now":"")+'"></span>';}
   return h+'</div><span class="q-count">'+(quiz.i+1)+" / "+quiz.set.length+"</span></div>";
 }
 function showQuestion(){
-  var Q=quiz.set[quiz.i],opts=shuffle(Q.a.map(function(t,i){return {t:t,ok:i===0};}));quiz.opts=opts;
+  var Q=quiz.set[quiz.i],opts=Q.options.map(function(t){return {t:t};});quiz.opts=opts;
   var cat=Q.cat.indexOf("calc-")===0?"Calculation":CAT_NAME[Q.cat];
   qBody.innerHTML=stepHTML([
     topHTML(),
@@ -1068,15 +1108,28 @@ function showQuestion(){
   hostSay("think");focusFirst(".opt");
 }
 function answer(i,btn){
-  var Q=quiz.set[quiz.i],ok=quiz.opts[i].ok,btns=qBody.querySelectorAll(".opt");
-  Array.prototype.forEach.call(btns,function(b,j){b.disabled=true;if(quiz.opts[j].ok)b.classList.add("right");else if(j!==i)b.classList.add("dim");});
-  if(!ok)btn.classList.add("wrong");
-  quiz.results[quiz.i]=ok;quiz.picks[quiz.i]=quiz.opts[i].t;if(ok)quiz.score++;
-  if(ok){confettiFrom(btn,30,1.4);hostSay("cheer");}else hostSay("shake");
-  var correct=Q.a[0],lastQ=quiz.i===quiz.set.length-1;
-  qBody.querySelector(".q-after").innerHTML='<div class="q-fact '+(ok?"ok":"no")+'">'+icon(ok?"check":"info")+"<span><b>"+(ok?"Correct.":"The answer is "+esc(correct)+".")+"</b> "+esc(Q.f)+'</span></div><div class="q-actions"><button class="btn primary" data-act="next" type="button">'+(lastQ?"See my result":"Next question")+icon("arrow")+"</button></div>";
-  var spans=qBody.querySelectorAll(".q-bar span");if(spans[quiz.i])spans[quiz.i].className=ok?"done":"miss";
-  focusFirst("[data-act=next]");
+  if(quiz.busy)return;quiz.busy=true;
+  var Q=quiz.set[quiz.i],idx=quiz.i,btns=qBody.querySelectorAll(".opt"),choice=quiz.opts[i].t;
+  Array.prototype.forEach.call(btns,function(b){b.disabled=true;});btn.classList.add("picked");
+  var after=qBody.querySelector(".q-after");after.innerHTML='<p class="q-note">Checking…</p>';
+  postJSON("/api/quiz/answer",{attempt:quiz.attempt,index:idx,choice:choice}).then(function(d){
+    quiz.busy=false;if(quiz.i!==idx)return;
+    var ok=!!d.correct;Q.correct=d.answer;Q.f=d.fact;
+    Array.prototype.forEach.call(btns,function(b,j){b.classList.remove("picked");if(quiz.opts[j].t===d.answer)b.classList.add("right");else if(j!==i)b.classList.add("dim");});
+    if(!ok)btn.classList.add("wrong");
+    quiz.results[idx]=ok;quiz.picks[idx]=choice;if(ok)quiz.score++;
+    if(d.done){quiz.score=d.score;quiz.code=d.code||null;quiz.first=!!d.first;}
+    if(ok){confettiFrom(btn,30,1.4);hostSay("cheer");}else hostSay("shake");
+    var lastQ=idx===quiz.set.length-1;
+    after.innerHTML='<div class="q-fact '+(ok?"ok":"no")+'">'+icon(ok?"check":"info")+"<span><b>"+(ok?"Correct.":"The answer is "+esc(d.answer)+".")+"</b> "+esc(d.fact||"")+'</span></div><div class="q-actions"><button class="btn primary" data-act="next" type="button">'+(lastQ?"See my result":"Next question")+icon("arrow")+"</button></div>";
+    var spans=qBody.querySelectorAll(".q-bar span");if(spans[idx])spans[idx].className=ok?"done":"miss";
+    focusFirst("[data-act=next]");
+  }).catch(function(e){
+    quiz.busy=false;
+    if(e.status===409||e.status===410||e.status===404){quizError(e.status===410?"This quiz has expired":"This quiz can’t continue","again",e.status);return;}
+    Array.prototype.forEach.call(btns,function(b){b.disabled=false;});btn.classList.remove("picked");
+    after.innerHTML='<p class="q-note" style="color:var(--red)">We couldn’t check that answer. Check your connection and tap your answer again.</p>';
+  });
 }
 function tier(){
   var T=TIERS[TIERS.length-1];for(var i=0;i<TIERS.length;i++)if(quiz.score>=TIERS[i].min){T=TIERS[i];break;}
@@ -1095,12 +1148,16 @@ function showResult(again){
   qBody.innerHTML=stepHTML([
     '<div class="score"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="44" fill="none" stroke="#eef1ec" stroke-width="10"/><circle class="ringfg" cx="50" cy="50" r="44" fill="none" stroke-width="10" stroke-linecap="round" transform="rotate(-90 50 50)" stroke-dasharray="'+C.toFixed(1)+'" stroke-dashoffset="'+C.toFixed(1)+'"/><text x="50" y="57" text-anchor="middle" font-family="Montserrat,sans-serif" font-weight="900" font-size="22" fill="#0b1f3a">'+quiz.score+"/"+n+'</text></svg><div><p class="q-kicker" style="margin:0">Your result</p><h2 id="qTitle" style="margin:2px 0 0">'+esc(tr.t)+"</h2></div></div>",
     '<p class="q-sub" style="margin-bottom:12px">'+esc(tr.s)+"</p>",
+    winHTML(),
     '<label class="f">Pick the line for your flyer</label>',
     '<div class="chips" id="resChips">'+quiz.choices.map(function(l,i){return '<button type="button" class="chip'+(l===quiz.picked?" on":"")+'" data-line="'+esc(l)+'">'+esc(l)+"</button>";}).join("")+"</div>",
     '<div class="lineprev" id="linePrev">'+esc(quiz.picked)+"</div>",
     '<div class="q-actions"><button class="btn primary" data-act="done" type="button">Make my card'+icon("arrow")+'</button><button class="btn outline" data-act="sharescore" type="button">'+icon("share")+'Share my score</button><button class="btn quiet" data-act="review" type="button">'+icon("check")+'Review answers</button><button class="btn quiet" data-act="again" type="button">'+icon("refresh")+"New questions</button></div>"
   ]);
-  if(!again){lastScore={score:quiz.score,n:n,t:tr.t};lsSet("wrd-score",JSON.stringify(lastScore));updateScoreLink();}
+  if(!again){
+    lastScore={score:quiz.score,n:n,t:tr.t,code:quiz.code||null};lsSet("wrd-score",JSON.stringify(lastScore));updateScoreLink();
+    if(quiz.code)lsSet("wrd-win",JSON.stringify({attempt:quiz.attempt,code:quiz.code}));
+  }
   var ring=qBody.querySelector(".ringfg");ring.setAttribute("stroke",quiz.score>=6?"#188e00":quiz.score>=3?"#0b1f3a":"#c62828");
   setTimeout(function(){ring.style.strokeDashoffset=(C*(1-quiz.score/n)).toFixed(1);},100);
   if(again)hostSay("idle");
@@ -1108,11 +1165,17 @@ function showResult(again){
   else hostSay(quiz.score>=5?"cheer":"idle");
   focusFirst("[data-act=done]");
 }
+/* winner code block on the result screen */
+function winHTML(){
+  if(quiz.code)return '<div class="wincode"><span>Your winner code</span><b>'+esc(quiz.code)+'</b><small>A perfect score on your first attempt. Keep this code: NARS uses it to confirm prize winners. When you download your card, your name and chapter are saved with this code.</small></div>';
+  if(quiz.score===quiz.set.length&&!quiz.first)return '<p class="q-note">Only your first quiz counts for prizes, but a perfect score is still a perfect score.</p>';
+  return "";
+}
 function showReview(){
   hostSay("idle");
   var items=quiz.set.map(function(Q,i){
     var ok=quiz.results[i];
-    var ans=ok?'<p class="ra">'+esc(Q.a[0])+"</p>":'<p class="ra"><s>'+esc(quiz.picks[i]||"")+"</s> <b>"+esc(Q.a[0])+"</b></p>";
+    var ans=ok?'<p class="ra">'+esc(Q.correct)+"</p>":'<p class="ra"><s>'+esc(quiz.picks[i]||"")+"</s> <b>"+esc(Q.correct)+"</b></p>";
     return '<li class="rv '+(ok?"ok":"no")+'"><span class="rvi">'+icon(ok?"check":"x")+'</span><div><p class="rq">'+(i+1)+". "+esc(Q.q)+"</p>"+ans+(Q.f?'<p class="rf">'+esc(Q.f)+"</p>":"")+"</div></li>";
   }).join("");
   qBody.innerHTML=stepHTML([
@@ -1194,9 +1257,11 @@ function makeScoreBlob(s){
     x.fillStyle="#b9c7d8";x.font="600 34px "+FONT;
     var who=current.name?current.name+" scored "+s.score+" out of "+s.n:"I scored "+s.score+" out of "+s.n;
     wrapLines(x,who+" on the Radiographer Check for World Radiography Day 2026.",900).forEach(function(l,i){x.fillText(l,540,940+i*48);});
+    if(s.code){x.fillStyle="#f4cd01";x.font="800 30px "+FONT;x.fillText("Winner code: "+s.code,540,1046);}
     // challenge pill
-    rr(x,250,1076,580,100,50);x.fillStyle="#188e00";x.fill();
-    x.fillStyle="#fff";x.font="800 38px "+FONT;x.fillText("Can you beat my score?",540,1140);
+    var py=s.code?1086:1076;
+    rr(x,250,py,580,100,50);x.fillStyle="#188e00";x.fill();
+    x.fillStyle="#fff";x.font="800 38px "+FONT;x.fillText("Can you beat my score?",540,py+64);
     x.fillStyle="#8fa3ba";x.font="600 28px "+FONT;x.fillText(SITE_URL.replace("https://",""),540,1240);
     /* developer credit */
     x.strokeStyle="rgba(255,255,255,.14)";x.lineWidth=2;x.beginPath();x.moveTo(400,1272);x.lineTo(680,1272);x.stroke();
@@ -1250,6 +1315,7 @@ function applyRoleUI(){
   var R=ROLES[ROLE];
   Array.prototype.forEach.call(document.querySelectorAll(".roleseg [data-role]"),function(b){b.setAttribute("aria-checked",String(b.getAttribute("data-role")===ROLE));});
   $("titleLabel").textContent=R.field;$("title").placeholder=R.ph;$("titleErr").textContent=R.err;
+  if(window.updateChapterHint)window.updateChapterHint();if(ROLE==="pro"){$("chList").hidden=true;}
 }
 function setRole(r){
   r=r==="pro"?"pro":"student";var changed=r!==ROLE;ROLE=r;
@@ -1454,13 +1520,11 @@ function celebrate(btn){confettiFrom(btn,100,2.4);toast("Saved. Share it with <b
 /* ---------- live counter and chapter ranking (Cloudflare Pages Functions + D1) ----------
    Shown only once the total passes STATS_MIN, so an early, small number never makes the site look empty.
    Add ?stats=1 to the URL to preview it before then. */
-/* chapter ranking is on hold until chapter names are standardised (see TODO.md) */
-var SHOW_RANKING=false;
-var STATS_MIN=100,statsForced=/[?&]stats=1\b/.test(location.search),stats=null,rankOpen=false,shownTotal=0;
-function chapterKey(raw){
-  var STOP={NARS:1,CHAPTER:1,CHAP:1,THE:1,OF:1,STUDENT:1,STUDENTS:1,ASSOCIATION:1,NIGERIAN:1,RADIOGRAPHY:1,RADIOGRAPHERS:1};
-  return String(raw||"").toUpperCase().replace(/[^A-Z0-9 ]+/g," ").split(/\s+/).filter(function(w){return w&&!STOP[w];}).join(" ").slice(0,40);
-}
+/* ranking uses official chapters only (RRBN list); typed names that don't match wait for admin review */
+var SHOW_RANKING=true;
+var STATS_MIN=50,statsForced=/[?&]stats=1\b/.test(location.search),stats=null,rankOpen=false,shownTotal=0;
+var CHAPTERS=window.WRD_CHAPTERS||[],CH_BY_CODE={};CHAPTERS.forEach(function(c){CH_BY_CODE[c.code]=c;});
+function myChapterCode(){return ROLE==="pro"?"":matchChapter(current.title,CHAPTERS);}
 function fmtN(n){return Number(n||0).toLocaleString("en-NG");}
 function countUp(elm,to){
   var from=shownTotal,t0=performance.now();shownTotal=to;if(reduce||from===to){elm.textContent=fmtN(to);return;}
@@ -1471,13 +1535,14 @@ function renderStats(){
   box.hidden=false;countUp($("liveTotal"),stats.total);
   var top=stats.top&&stats.top[0];
   var rads=stats.radiographers?fmtN(stats.radiographers)+(stats.radiographers===1?" radiographer":" radiographers"):"";
-  var lead=SHOW_RANKING&&top?top.name+" leads with "+fmtN(top.count):"";
+  var lead=SHOW_RANKING&&top?top.code+" leads with "+fmtN(top.count):"";
   $("liveLead").textContent=lead+(lead&&rads?" · ":"")+rads;
   box.querySelector(".lsep").hidden=!$("liveLead").textContent;
   $("liveMore").hidden=!SHOW_RANKING;
-  var mine=ROLE==="pro"?"":chapterKey(current.title),max=top?top.count:1;
+  var mine=myChapterCode(),max=top?top.count:1;
   $("rankList").innerHTML=(stats.top||[]).map(function(c,i){
-    return '<li class="'+(c.name===mine?"me":"")+'" style="--p:'+Math.max(4,Math.round(c.count/max*100))+'%"><span class="rn">'+(i+1)+'</span><span class="rc">'+esc(c.name)+'</span><span class="rv2">'+fmtN(c.count)+"</span></li>";
+    var full=CH_BY_CODE[c.code]?CH_BY_CODE[c.code].name:"";
+    return '<li class="'+(c.code===mine?"me":"")+'" style="--p:'+Math.max(4,Math.round(c.count/max*100))+'%"><span class="rn">'+(i+1)+'</span><span class="rc">'+esc(c.code)+(full?' <small class="rfull">'+esc(full)+"</small>":"")+'</span><span class="rv2">'+fmtN(c.count)+"</span></li>";
   }).join("")||"<li><span></span><span class=\"rc\">No chapters yet</span><span></span></li>";
   $("rank").hidden=!(SHOW_RANKING&&rankOpen);
 }
@@ -1487,19 +1552,67 @@ function loadStats(){
 }
 function recordCard(){
   var key=(ROLE+"|"+current.name+"|"+chapterKey(current.title)).toLowerCase();if((ROLE!=="pro"&&!chapterKey(current.title))||!window.fetch)return;
+  var win=null;try{win=JSON.parse(lsGet("wrd-win")||"null");}catch(e){}
   var done=[];try{done=JSON.parse(lsGet("wrd-counted")||"[]");}catch(e){}
   if(done.indexOf(key)>=0)return;
-  fetch("/api/card",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({chapter:current.title,role:ROLE})})
+  fetch("/api/card",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({chapter:current.title,role:ROLE,device:DEVICE,name:current.name,attempt:win&&win.attempt||""})})
     .then(function(r){return r.ok?r.json():null;})
     .then(function(d){
       if(!d||typeof d.total!=="number")return;
       done.push(key);lsSet("wrd-counted",JSON.stringify(done.slice(-20)));
       stats=d;renderStats();
-      if(d.total>=STATS_MIN||statsForced)setTimeout(function(){toast("You made card number <b>"+fmtN(d.total)+"</b>."+(d.chapter?" "+esc(d.chapter.name)+" is now #"+d.chapter.rank+" with "+fmtN(d.chapter.count)+" cards.":""),"award",5200);},2600);
+      var extra=d.chapter&&d.chapter.code?" "+esc(d.chapter.code)+" is now #"+d.chapter.rank+" with "+fmtN(d.chapter.count)+" cards.":d.chapter&&d.chapter.pending?" Your chapter will join the ranking once NARS confirms the name.":"";
+      if(d.total>=STATS_MIN||statsForced)setTimeout(function(){toast("You made card number <b>"+fmtN(d.total)+"</b>."+extra,"award",5600);},2600);
     }).catch(function(){});
 }
 $("liveMore").addEventListener("click",function(){rankOpen=!rankOpen;this.setAttribute("aria-expanded",rankOpen);this.lastChild.textContent=rankOpen?"Hide ranking":"Chapter ranking";renderStats();});
 $("title").addEventListener("change",renderStats);
+
+/* ---------- chapter field: suggest official chapters as people type ---------- */
+(function(){
+  var inp=$("title"),list=$("chList"),hint=$("chHint"),items=[],active=-1;
+  function norm(t){return String(t||"").toUpperCase().replace(/[^A-Z0-9 ]+/g," ").replace(/\s+/g," ").trim();}
+  var INDEX=CHAPTERS.map(function(c){return {c:c,text:" "+norm([c.code,c.name,c.state].concat(c.aliases||[]).join(" "))+" "};});
+  function suggest(){
+    if(ROLE==="pro"){close();return;}
+    var q=chapterTokens(inp.value);
+    items=INDEX.filter(function(x){return q.every(function(w){return x.text.indexOf(" "+w)>=0;});}).map(function(x){return x.c;}).slice(0,8);
+    active=-1;
+    list.innerHTML=items.length?items.map(function(c,i){return '<li role="option" id="cho'+i+'" aria-selected="false" data-i="'+i+'"><b>'+esc(c.code)+"</b><span>"+esc(c.name)+"</span></li>";}).join("")
+      :'<li class="none">No school on the list matches. Your chapter will be reviewed by NARS.</li>';
+    list.hidden=false;inp.setAttribute("aria-expanded","true");
+  }
+  function close(){list.hidden=true;inp.setAttribute("aria-expanded","false");inp.removeAttribute("aria-activedescendant");active=-1;}
+  function move(d){
+    if(list.hidden||!items.length)return;active=(active+d+items.length)%items.length;
+    Array.prototype.forEach.call(list.children,function(li,i){li.setAttribute("aria-selected",String(i===active));});
+    inp.setAttribute("aria-activedescendant","cho"+active);var el=list.children[active];if(el&&el.scrollIntoView)el.scrollIntoView({block:"nearest"});
+  }
+  function pick(i){
+    var c=items[i];if(!c)return;
+    inp.value="NARS "+c.code+" CHAPTER";close();
+    inp.dispatchEvent(new Event("input"));updateHint();renderStats();
+  }
+  window.updateChapterHint=updateHint;
+  function updateHint(){
+    if(ROLE==="pro"){hint.textContent="";hint.className="chhint";return;}
+    var code=matchChapter(inp.value,CHAPTERS);
+    if(code){var c=CH_BY_CODE[code];hint.innerHTML=icon("check")+" Counts for "+esc(code)+" ("+esc(c.name)+")";hint.className="chhint ok";}
+    else if(chapterKey(inp.value)){hint.textContent="Not on the RRBN list yet. Pick your school from the suggestions, or NARS will review this name.";hint.className="chhint warn";}
+    else{hint.textContent="Start typing your school, then pick it from the list.";hint.className="chhint";}
+  }
+  inp.addEventListener("input",function(){suggest();updateHint();});
+  inp.addEventListener("focus",function(){if(ROLE!=="pro")suggest();});
+  inp.addEventListener("blur",function(){setTimeout(close,150);});
+  inp.addEventListener("keydown",function(e){
+    if(e.key==="ArrowDown"){e.preventDefault();if(list.hidden)suggest();move(1);}
+    else if(e.key==="ArrowUp"){e.preventDefault();move(-1);}
+    else if(e.key==="Enter"&&!list.hidden&&active>=0){e.preventDefault();pick(active);}
+    else if(e.key==="Escape"&&!list.hidden){e.preventDefault();close();}
+  });
+  list.addEventListener("mousedown",function(e){var li=e.target.closest("li[data-i]");if(li){e.preventDefault();pick(+li.getAttribute("data-i"));}});
+  updateHint();
+})();
 loadStats();setInterval(function(){if(!document.hidden)loadStats();},60000);
 
 /* launch today, event tomorrow: wording follows the date in Nigeria */

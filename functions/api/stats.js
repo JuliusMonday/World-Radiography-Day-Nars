@@ -1,4 +1,4 @@
-// GET /api/stats -> { total, chapters, top: [{ name, count }] }
+// GET /api/stats -> { total, radiographers, chapters, top: [{ code, count }] } (official chapters only)
 import { json, methodNotAllowed, readStats } from "../../lib/counter.js";
 
 export async function onRequestGet({ env }) {

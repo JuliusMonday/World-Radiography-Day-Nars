@@ -1,25 +1,23 @@
 # To do
 
-## Chapter leaderboard (on hold)
+## Done (7 Nov 2026)
 
-The live counter and ranking are built but hidden until 100 cards. Before relying on the ranking:
+- [x] Official chapter list (RRBN, June 2026: 41 universities) with common short forms, in `lib/chapters.json`
+- [x] Chapter field suggests schools as you type; names that don't match go to a pending pile off the leaderboard
+- [x] Alternative names map to chapters (e.g. "Nnamdi Azikiwe University", "NAU", "Nnewi" → UNIZIK)
+- [x] Admin merge tool for pending names (spellings are remembered); discard for junk
+- [x] Public threshold lowered to 50 cards; ranking shows official chapters only
+- [x] Fixed "1 radiographers"
+- [x] Private `/admin` page: totals, students vs radiographers, quiz numbers, cards per day, chapters, CSV export
+- [x] Fair prizes: server-side marking (the page never gets the answers), only a device's first finished quiz counts
+- [x] Winner codes (e.g. `WRD-7K3QX`) on the result screen and share image, checkable in admin, with a random draw
 
-- [ ] Get the official list of NARS chapters (with common short forms) from the PRO
-- [ ] Replace the free-text chapter field with a searchable chapter list; "My chapter isn't listed" goes to a pending pile that stays off the leaderboard
-- [ ] Map alternative names to each chapter (e.g. "Nnamdi Azikiwe University", "NAU" → UNIZIK)
-- [ ] Admin merge tool for duplicate chapter names; merge the cards already recorded
-- [ ] Lower the public threshold from 100 to 50 cards
-- [ ] Below 3 cards per chapter, show "Chapters appear once they have 3 cards" instead of "No chapters yet"
-- [ ] Fix grammar: "1 radiographers" → "1 radiographer"
+## Needs doing in the Cloudflare dashboard
 
-## Admin page and prizes (not started)
+- [ ] Set up Cloudflare Access for `/admin` and `/api/admin` (only narsnationalinformationbureau@gmail.com and jutelabsofficial@gmail.com), then add the `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD` secrets
+- [ ] Optional: set the `IP_SALT` secret and redeploy
 
-- [ ] Private `/admin` page behind Cloudflare Access (PRO + developer emails): totals, students vs radiographers, cards per day, full chapter list, CSV export
-- [ ] Fair prizes for 10/10: server-side marking (questions sent without answers), only the first attempt counts
-- [ ] Winner code (e.g. `WRD-7K3Q`) on the result and share image, checkable in the admin page
-- [ ] Decide prize rules (all 10/10 scorers, first X, or random draw) and contact method (winner code only, or a consented WhatsApp form)
+## Decisions for NARS
 
-## Other
-
-- [ ] Optional: set the `IP_SALT` secret in the Pages project and redeploy
-- [ ] Confirm with NARS that qualified radiographers may use the NARS-branded flyer
+- [ ] Prize rules (all 10/10 first attempts, first X, or a random draw) and how winners are contacted
+- [ ] Confirm qualified radiographers may use the NARS-branded flyer

@@ -8,18 +8,35 @@ Developed by [Jutelabs Limited](https://www.linkedin.com/in/chimaobi-julius-mond
 
 | Path | What it is |
 |---|---|
-| `src/app.html` | The page: layout, styles, quiz, skeleton animation, card rendering |
-| `src/questions.js` | Question bank (hand-written and generated calculation questions) |
-| `src/flyer-bg.jpg` | Clean 2160 × 2700 flyer background |
-| `src/nars-logo.jpg` | NARS logo used in the quiz |
-| `src/public/` | Link preview image (`og.jpg`), favicons and web manifest, copied into the site as is |
+| `src/app.html` | The card maker page: layout, styles, quiz screens, skeleton animation, card rendering |
+| `src/admin.html` | Private admin page (`/admin`) for the NARS National Information Bureau |
+| `src/flyer-bg.jpg`, `src/nars-logo.jpg`, `src/public/` | Flyer background, logo, link preview image, icons |
 | `src/build.py` | Builds the site into `site/` |
-| `functions/api/` | Card counter API: `POST /api/card` records a downloaded card for a chapter, `GET /api/stats` returns totals and the chapter ranking |
-| `lib/counter.js` | Shared helpers for the API (chapter name tidying, stats query) |
-| `wrangler.toml` | Pages config: output folder and the D1 database binding (`DB` → `wrd2026-cards`) |
+| `lib/questions.js` | Quiz question bank (server only, so the answers never reach the page) |
+| `lib/quiz.js` | Picks each 10-question quiz |
+| `lib/chapters.json` | Official chapter list (RRBN, June 2026) with short names and alternative spellings |
+| `lib/match.js` | Matches typed chapter names to official chapters (used by the API and the page) |
+| `lib/counter.js`, `lib/access.js` | Shared API helpers; admin sign-in check |
+| `functions/api/` | API: `quiz/start`, `quiz/answer`, `card`, `stats`, `admin/*` |
+| `db/schema.sql` | Database tables (D1 `wrd2026-cards`) |
+| `wrangler.toml` | Pages config and the D1 binding |
 
-The counter stores only a count per chapter. Visitor IPs are hashed, used for rate limiting (20 cards an hour) and deleted after a day. The public counter stays hidden until 100 cards; add `?stats=1` to the URL to preview it.
-| `world Radiography day.svg` / `.png` | Original flyer design files |
+## How the quiz and prizes work
+
+- The page asks the API for 10 questions (no answers included); each answer is marked by the server.
+- Only a device's first finished quiz counts. A 10/10 first attempt gets a winner code like `WRD-7K3QX`.
+- When a winner downloads their card, their name and chapter are saved with the code. Nothing personal is stored for anyone else.
+- The admin page lists winners, checks codes and runs a random draw.
+
+## Admin access
+
+`/admin` is protected by Cloudflare Access (email one-time code). Only the addresses in `lib/access.js` are accepted, and the API verifies the Access token itself. Pages secrets: `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD` (and optionally `ADMIN_EMAILS`, `IP_SALT`).
+
+For local testing, put `DEV_ADMIN_EMAIL=you@example.com` in `.dev.vars` (git-ignored) and run:
+
+```bash
+python src/build.py && npx wrangler pages dev site
+```
 
 ## Build
 
