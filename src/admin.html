@@ -60,6 +60,18 @@ tr.zero td{color:#9aa6b2}
 .drawn{margin-top:14px;padding:14px;border-radius:12px;background:#fff8d6;border:1px solid #f0dc7a}
 .note{font-size:13px;color:var(--muted);margin:10px 0 0}
 .scroll{overflow:auto}
+.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:12px}
+.form label{display:grid;gap:6px;font-weight:700;font-size:13px}
+input[type=datetime-local]{border:1.5px solid #cfd6cc;border-radius:10px;padding:8px 12px;background:#fff}
+.count{font-weight:700;margin:4px 0 12px}
+.draw{margin-top:18px;padding:16px;border:1px solid var(--line);border-radius:14px}
+.draw h3{font:800 16px var(--head);margin:0}
+.draw .meta{color:var(--muted);font-size:13px;margin:6px 0 10px}
+tr.forfeit td{color:#9aa6b2;text-decoration:line-through}
+tr.forfeit td:last-child{text-decoration:none}
+.tag.won{background:#fff3b8;color:#6b5600}
+.tag.bad{background:var(--red-tint);color:var(--red)}
+.mini{padding:5px 10px;font-size:12px}
 [hidden]{display:none!important}
 </style>
 </head>
@@ -89,6 +101,7 @@ tr.zero td{color:#9aa6b2}
       <button role="tab" aria-selected="true" data-tab="chapters">Chapters</button>
       <button role="tab" aria-selected="false" data-tab="pending">Pending names</button>
       <button role="tab" aria-selected="false" data-tab="winners">10/10 winners</button>
+      <button role="tab" aria-selected="false" data-tab="draw">Prize draw</button>
       <button role="tab" aria-selected="false" data-tab="days">Cards per day</button>
     </div>
 
@@ -118,20 +131,31 @@ tr.zero td{color:#9aa6b2}
         <h2 style="margin:0;flex:1">10/10 winners</h2>
         <button class="btn quiet" id="csvWinners" type="button">Download CSV</button>
       </div>
-      <p class="muted" style="margin-top:0">Only a device's first finished quiz counts, and the server marks every answer. Names and chapters appear once a winner downloads their card. Very fast times can be worth a second look.</p>
+      <p class="muted" style="margin-top:0">Only a device's first finished quiz counts, and the server marks every answer. Names and chapters appear once a winner downloads their card. Run the prize draw from the Prize draw tab.</p>
       <div class="tools">
         <input type="text" id="verifyCode" placeholder="Check a code, e.g. WRD-7K3QX" aria-label="Winner code">
         <button class="btn navy" id="verifyBtn" type="button">Check code</button>
         <span id="verifyOut"></span>
       </div>
-      <div class="tools">
-        <label for="drawN">Random draw:</label>
-        <input type="number" id="drawN" min="1" value="3" style="width:80px">
-        <label><input type="checkbox" id="drawNamed" checked> only winners with a name</label>
-        <button class="btn primary" id="drawBtn" type="button">Draw winners</button>
-      </div>
-      <div id="drawOut"></div>
       <div class="scroll"><table><thead><tr><th>Code</th><th>Name</th><th>Chapter</th><th>Role</th><th class="n">Time</th><th>Finished</th></tr></thead><tbody id="wnBody"></tbody></table></div>
+    </section>
+
+    <section class="panel" data-pane="draw" hidden>
+      <h2>Prize draw</h2>
+      <p class="muted" style="margin-top:0">The server checks every 10/10 winner for you. It leaves out anyone who hasn't downloaded a card, finished after the closing time, answered too fast, used a fake-looking name, entered twice with the same name and chapter, or already won. Each draw is random and saved with the time it was run, so it can't be quietly redone.</p>
+      <div class="form">
+        <label>Closing time (Nigeria time)<input type="datetime-local" id="dwClose"></label>
+        <label>Too fast if under (seconds)<input type="number" id="dwMin" min="0" max="600" value="40"></label>
+        <label>Prizes<input type="number" id="dwPrizes" min="1" max="200" value="5"></label>
+        <label>Backups<input type="number" id="dwBackups" min="0" max="50" value="2"></label>
+      </div>
+      <p id="dwCount" class="count">Checking entries…</p>
+      <div class="tools">
+        <button class="btn primary" id="dwRun" type="button">Run the draw</button>
+        <button class="btn quiet" id="dwShowEx" type="button">Show who was left out</button>
+      </div>
+      <div class="scroll" id="dwEx" hidden><table><thead><tr><th>Code</th><th>Name</th><th>Chapter</th><th>Reason left out</th></tr></thead><tbody id="dwExBody"></tbody></table></div>
+      <div id="dwList"></div>
     </section>
 
     <section class="panel" data-pane="days" hidden>
@@ -183,7 +207,7 @@ function render(){
     ["Cards made",c.total,"hl"],["Students",c.students],["Radiographers",c.radiographers],["Pending names",c.pending],
     ["Quizzes started",q.started],["Quizzes finished",q.finished],["Average score",q.avg_score==null?"–":q.avg_score+"/10"],["10/10 winners",q.winners,"hl"]
   ].map(function(x){return '<div class="stat '+(x[2]||"")+'"><b>'+(typeof x[1]==="number"?n(x[1]):esc(x[1]))+"</b><span>"+esc(x[0])+"</span></div>";}).join("");
-  renderChapters();renderPending();renderWinners();renderDays();
+  renderChapters();renderPending();renderWinners();renderDays();loadEntries();loadDraws();
 }
 function renderChapters(){
   var f=$("chSearch").value.trim().toUpperCase(),i=0;
@@ -238,19 +262,65 @@ $("pdBody").addEventListener("click",function(e){
     b.disabled=true;api("discard",{method:"POST",body:JSON.stringify({key:p.key})}).then(load).catch(function(err){alert(err.message);b.disabled=false;});
   }
 });
+// ---- prize draw ----
+function closeTs(){var v=$("dwClose").value;if(!v)return 0;var m=/^(\d+)-(\d+)-(\d+)T(\d+):(\d+)/.exec(v);return m?Date.UTC(+m[1],m[2]-1,+m[3],+m[4],+m[5])-3600e3:0;}
+function drawSettings(){return {closeAt:closeTs(),minSeconds:$("dwMin").value,prizes:$("dwPrizes").value,backups:$("dwBackups").value};}
+var entryTimer=0;
+function loadEntries(){
+  var st=drawSettings();$("dwCount").textContent="Checking entries…";
+  return api("entries?close="+st.closeAt+"&min="+encodeURIComponent(st.minSeconds)).then(function(r){
+    $("dwCount").textContent=r.eligible.length+" eligible for the draw · "+r.excluded.length+" left out";
+    $("dwRun").disabled=!r.eligible.length;
+    $("dwExBody").innerHTML=r.excluded.length?r.excluded.map(function(w){return '<tr><td class="code">'+esc(w.code)+"</td><td>"+esc(w.name||"")+"</td><td>"+esc(w.chapter_code||w.chapter||"")+'</td><td><span class="tag bad">'+esc(w.why)+"</span></td></tr>";}).join(""):'<tr><td colspan="4" class="muted">Nobody left out.</td></tr>';
+  }).catch(function(e){$("dwCount").textContent=e.message;});
+}
+function loadDraws(){
+  return api("draws").then(function(r){
+    data.draws=r.draws;
+    $("dwList").innerHTML=r.draws.length?r.draws.map(function(d,i){
+      var st=d.settings,rows=d.picks.map(function(p){
+        var label=p.place?'<span class="tag won">Prize '+p.place+"</span>":p.backup?'<span class="tag">Backup '+p.backup+"</span>":'<span class="tag bad">Forfeited</span>';
+        var status=p.status==="claimed"?'<span class="tag ok">Claimed</span>':p.status==="forfeit"?"":'<span class="muted">Waiting</span>';
+        var btns=p.status==="pending"?'<button class="btn primary mini" type="button" data-st="claimed">Claimed</button> <button class="btn danger mini" type="button" data-st="forfeit">Forfeit</button>':'<button class="btn quiet mini" type="button" data-st="pending">Undo</button>';
+        return '<tr class="'+(p.status==="forfeit"?"forfeit":"")+'" data-id="'+esc(d.id)+'" data-code="'+esc(p.code)+'"><td>'+label+'</td><td class="code">'+esc(p.code)+"</td><td>"+esc(p.name||"")+"</td><td>"+esc(p.chapter_code||p.chapter||"")+"</td><td>"+status+'</td><td style="white-space:nowrap">'+btns+"</td></tr>";
+      }).join("");
+      return '<div class="draw"><div class="tools" style="margin:0"><h3 style="flex:1">'+(i===0?"Latest draw":"Earlier draw")+" · "+when(d.created_at)+'</h3><button class="btn quiet mini" type="button" data-csv="'+i+'">CSV</button> <button class="btn danger mini" type="button" data-del="'+esc(d.id)+'">Delete draw</button></div>'+
+        '<p class="meta">'+d.prizes+" prize(s) and "+(st.backups||0)+" backup(s), drawn from "+d.pool+" eligible winners"+(st.closeAt?" · closing time "+when(st.closeAt):"")+" · too fast under "+st.minSeconds+"s. If a winner forfeits, the next backup moves up automatically.</p>"+
+        '<div class="scroll"><table><thead><tr><th>Place</th><th>Code</th><th>Name</th><th>Chapter</th><th>Status</th><th></th></tr></thead><tbody>'+rows+"</tbody></table></div></div>";
+    }).join(""):'<p class="muted" style="margin-top:18px">No draws yet.</p>';
+  }).catch(function(e){$("dwList").innerHTML='<p class="err">'+esc(e.message)+"</p>";});
+}
+function afterDrawChange(){return Promise.all([loadDraws(),loadEntries()]);}
+["dwClose","dwMin"].forEach(function(id){$(id).addEventListener("input",function(){clearTimeout(entryTimer);entryTimer=setTimeout(loadEntries,400);});});
+$("dwShowEx").addEventListener("click",function(){var h=!$("dwEx").hidden;$("dwEx").hidden=h;this.textContent=h?"Show who was left out":"Hide who was left out";});
+$("dwRun").addEventListener("click",function(){
+  var st=drawSettings(),b=this;
+  if(!confirm("Run the draw for "+st.prizes+" prize(s) and "+st.backups+" backup(s)? The result is saved with the time it was drawn."))return;
+  b.disabled=true;
+  api("draw",{method:"POST",body:JSON.stringify(st)}).then(afterDrawChange).catch(function(e){alert(e.message);}).then(function(){b.disabled=false;});
+});
+$("dwList").addEventListener("click",function(e){
+  var b=e.target.closest("button");if(!b)return;
+  if(b.hasAttribute("data-del")){
+    if(!confirm("Delete this draw? Only do this for a practice run. Its winners become eligible again."))return;
+    api("draw-delete",{method:"POST",body:JSON.stringify({id:b.getAttribute("data-del")})}).then(afterDrawChange).catch(function(err){alert(err.message);});
+  }else if(b.hasAttribute("data-csv")){
+    var d=data.draws[+b.getAttribute("data-csv")];
+    csv("wrd2026-draw.csv",[["Place","Code","Name","Chapter","Status"]].concat(d.picks.map(function(p){return [p.place?"Prize "+p.place:p.backup?"Backup "+p.backup:"Forfeited",p.code,p.name,p.chapter_code||p.chapter,p.status];})));
+  }else if(b.hasAttribute("data-st")){
+    var tr=b.closest("tr"),st=b.getAttribute("data-st");
+    if(st==="forfeit"&&!confirm("Mark "+tr.getAttribute("data-code")+" as forfeited? The next backup takes their place."))return;
+    b.disabled=true;
+    api("draw-status",{method:"POST",body:JSON.stringify({id:tr.getAttribute("data-id"),code:tr.getAttribute("data-code"),status:st})}).then(afterDrawChange).catch(function(err){alert(err.message);b.disabled=false;});
+  }
+});
+
 $("verifyBtn").addEventListener("click",function(){
   var c=$("verifyCode").value.trim();if(!c)return;$("verifyOut").textContent="Checking…";
   api("verify?code="+encodeURIComponent(c)).then(function(r){var w=r.winner;$("verifyOut").innerHTML='<span class="tag ok">Valid</span> '+esc(w.name||"name not given yet")+(w.chapter?" · "+esc(w.chapter):"")+" · "+when(w.finished_at);})
     .catch(function(err){$("verifyOut").innerHTML='<span class="tag" style="background:var(--red-tint);color:var(--red)">'+(err.status===404?"Not a winner code":esc(err.message))+"</span>";});
 });
 $("verifyCode").addEventListener("keydown",function(e){if(e.key==="Enter")$("verifyBtn").click();});
-$("drawBtn").addEventListener("click",function(){
-  var pool=data.winners.filter(function(w){return !$("drawNamed").checked||w.name;}),k=Math.max(1,Math.min(+$("drawN").value||1,pool.length));
-  if(!pool.length){$("drawOut").innerHTML='<p class="muted">No eligible winners to draw from yet.</p>';return;}
-  var a=pool.slice();for(var i=a.length-1;i>0;i--){var r=new Uint32Array(1);crypto.getRandomValues(r);var j=r[0]%(i+1),t=a[i];a[i]=a[j];a[j]=t;}
-  var picked=a.slice(0,k);
-  $("drawOut").innerHTML='<div class="drawn"><b>Drawn at '+when(Date.now())+" from "+pool.length+' eligible winners</b><table style="margin-top:8px"><tbody>'+picked.map(winnerRow).join("")+"</tbody></table></div>";
-});
 $("csvChapters").addEventListener("click",function(){csv("wrd2026-chapters.csv",[["Code","University","State","Status","Cards"]].concat(data.chapters.official.map(function(r){return [r.code,r.name,r.state,r.accredited?"Accredited":"Not accredited",r.count];})));});
 $("csvPending").addEventListener("click",function(){csv("wrd2026-pending-names.csv",[["Typed name","Cards"]].concat(data.chapters.pending.map(function(p){return [p.name,p.count];})));});
 $("csvWinners").addEventListener("click",function(){csv("wrd2026-winners.csv",[["Code","Name","Chapter typed","Chapter code","Role","Seconds","Finished (Nigeria time)"]].concat(data.winners.map(function(w){return [w.code,w.name,w.chapter,w.chapter_code,w.role,w.seconds,when(w.finished_at)];})));});

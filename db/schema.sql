@@ -38,3 +38,14 @@ CREATE TABLE IF NOT EXISTS attempts (
 CREATE INDEX IF NOT EXISTS attempts_device ON attempts(device, finished_at);
 CREATE INDEX IF NOT EXISTS attempts_created ON attempts(created_at);
 CREATE UNIQUE INDEX IF NOT EXISTS attempts_code ON attempts(code);
+
+-- Saved prize draws. picks = JSON list of {code, status} in the order drawn; status is pending, claimed or forfeit.
+-- The first `prizes` picks that haven't forfeited hold the prize places; the rest are backups.
+CREATE TABLE IF NOT EXISTS draws (
+  id TEXT PRIMARY KEY,
+  created_at INTEGER NOT NULL,
+  prizes INTEGER NOT NULL,
+  settings TEXT NOT NULL,
+  pool INTEGER NOT NULL,
+  picks TEXT NOT NULL
+);
