@@ -1,5 +1,5 @@
 // GET /api/stats -> { total, chapters, top: [{ name, count }] }
-import { json, readStats } from "../../lib/counter.js";
+import { json, methodNotAllowed, readStats } from "../../lib/counter.js";
 
 export async function onRequestGet({ env }) {
   if (!env.DB) return json({ error: "counter not configured" }, 503);
@@ -10,3 +10,6 @@ export async function onRequestGet({ env }) {
     return json({ error: "stats unavailable" }, 500);
   }
 }
+
+// Any other method on /api/stats
+export const onRequest = () => methodNotAllowed("GET");

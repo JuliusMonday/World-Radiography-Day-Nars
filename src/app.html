@@ -220,6 +220,10 @@ body.ready .reveal{animation:up .6s cubic-bezier(.2,.8,.2,1) forwards}
 
 .foot{margin-top:28px}
 .linkrow{display:flex;flex-wrap:wrap;gap:6px 22px}
+.roleseg{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;margin:0 0 16px;background:#eef1ec;border-radius:12px}
+.roleseg button{border:0;background:transparent;padding:10px 8px;border-radius:9px;font:700 14px var(--head);color:var(--muted);cursor:pointer;transition:background .15s,color .15s,box-shadow .15s}
+.roleseg button[aria-checked=true]{background:#fff;color:var(--navy);box-shadow:0 1px 3px rgba(11,31,58,.18)}
+.q-step .roleseg{margin-bottom:18px}
 .live{display:flex;align-items:center;flex-wrap:wrap;gap:4px 10px;padding:12px 14px;margin:0 0 20px;border-radius:12px;background:var(--green-tint);font-size:14px}
 .live[hidden],.rank[hidden]{display:none}
 .live .dot{width:9px;height:9px;border-radius:50%;background:var(--green);animation:ping 1.8s infinite}
@@ -459,6 +463,10 @@ var PL=(function(){
         <div class="rank" id="rank" hidden><ol id="rankList"></ol></div>
         <div class="step">
           <p class="stephead"><b>1</b>Your details</p>
+          <div class="roleseg" role="radiogroup" aria-label="I am a">
+            <button type="button" role="radio" data-role="student" aria-checked="true">Student Radiographer</button>
+            <button type="button" role="radio" data-role="pro" aria-checked="false">Radiographer</button>
+          </div>
           <div class="fields2">
           <div class="field">
             <label class="f" for="name">Full name <em aria-hidden="true">*</em></label>
@@ -466,7 +474,7 @@ var PL=(function(){
             <p class="err" id="nameErr" hidden>Enter your name.</p>
           </div>
           <div class="field">
-            <label class="f" for="title">Institution or chapter <em aria-hidden="true">*</em></label>
+            <label class="f" for="title"><span id="titleLabel">Institution or chapter</span> <em aria-hidden="true">*</em></label>
             <input type="text" id="title" maxlength="48" autocomplete="organization" placeholder="NARS UNIZIK CHAPTER" required aria-describedby="titleErr">
             <p class="err" id="titleErr" hidden>Enter your institution or chapter.</p>
           </div>
@@ -530,6 +538,8 @@ var PL=(function(){
         <svg id="stage" viewBox="0 0 1080 1350" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
           <defs>
             <linearGradient id="barG" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#f4cd01"/><stop offset=".5" stop-color="#188e00"/><stop offset="1" stop-color="#f4cd01"/></linearGradient>
+            <linearGradient id="barGPro" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#0b1f3a"/><stop offset=".5" stop-color="#1f3f6e"/><stop offset="1" stop-color="#0b1f3a"/></linearGradient>
+            <linearGradient id="goldG" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#c99a1e"/><stop offset=".5" stop-color="#f1d27a"/><stop offset="1" stop-color="#c99a1e"/></linearGradient>
             <clipPath id="pcSmall" clipPathUnits="userSpaceOnUse"><circle r="68"/></clipPath>
             <filter id="ol" x="-20%" y="-20%" width="140%" height="140%">
               <feMorphology in="SourceAlpha" operator="dilate" radius="2.2" result="d"/>
@@ -584,9 +594,19 @@ $("qLogo").src=window.NARS_LOGO;
 
 /* ---------- flyer geometry (1080 x 1350 space) ---------- */
 var PH={x:540,y:680,r:214.5},BAR={x:164,y:952,w:752,h:86,r:13},BOX={x:254,y:1058,w:607,h:69,r:11};
+var GOLD="#d4af37";
 var BAR_STOPS=["#f4cd01","#dcc701","#c3c000","#acba01","#93b200","#7cac01","#64a400","#4d9e01","#369700","#239200","#188e00","#239200","#379700","#4e9e01","#65a400","#7dac01","#94b200","#adba01","#c4c000","#ddc701","#f4ce01"];
 var TARGET={name:{x:540,y:995},title:{x:557,y:1092},quote:{x:557,y:1201},photo:{x:540,y:680}};
-var DEFAULT_LINE="Proudly a Student Radiographer";
+/* who the card is for: student radiographers and qualified radiographers get different flyers */
+var ROLES={
+  student:{badge:"STUDENT RADIOGRAPHER",field:"Institution or chapter",ph:"NARS UNIZIK CHAPTER",err:"Enter your institution or chapter.",cardPh:"Name of institution/local chapter",def:"Proudly a Student Radiographer"},
+  pro:{badge:"RADIOGRAPHER",field:"Hospital or workplace",ph:"Federal Medical Centre, Owerri",err:"Enter your hospital or workplace.",cardPh:"Hospital or workplace",def:"Proudly a Radiographer"}
+};
+var ROLE=(function(){try{return localStorage.getItem("wrd-role")==="pro"?"pro":"student";}catch(e){return "student";}})();
+var DEFAULT_LINE=ROLES[ROLE].def;
+/* lines that only make sense for one role, swapped when the role changes [student, radiographer] */
+var LINE_SWAP=[["Proudly a Student Radiographer","Proudly a Radiographer"],["Radiographer in the making","Still sharp, still learning"],["Still learning, always caring","Always learning, always caring"]];
+var PRO_EXTRA="Registered. Trusted. Caring.";
 
 /* ---------- state ---------- */
 var reduce=window.matchMedia&&matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -636,8 +656,10 @@ function render(x,k,clean){
   }
   withPulse(x,"name",TARGET.name.x,TARGET.name.y,function(){
     var g=x.createLinearGradient(BAR.x,0,BAR.x+BAR.w,0);
-    BAR_STOPS.forEach(function(c,i){g.addColorStop(i/(BAR_STOPS.length-1),c);});
+    if(ROLE==="pro"){g.addColorStop(0,"#0b1f3a");g.addColorStop(.5,"#1f3f6e");g.addColorStop(1,"#0b1f3a");}
+    else BAR_STOPS.forEach(function(c,i){g.addColorStop(i/(BAR_STOPS.length-1),c);});
     rr(x,BAR.x,BAR.y,BAR.w,BAR.h,BAR.r);x.fillStyle=g;x.fill();
+    if(ROLE==="pro"){x.lineWidth=4;x.strokeStyle=GOLD;x.stroke();}
     var t=delivered.name?delivered.name.toUpperCase():"YOUR NAME";
     fitFont(x,t,"800",40,BAR.w-70);
     x.textAlign="center";x.textBaseline="middle";x.globalAlpha=delivered.name?1:.75;
@@ -645,12 +667,21 @@ function render(x,k,clean){
     x.fillStyle="#fff";x.fillText(t,TARGET.name.x,BAR.y+BAR.h/2+2);
   });
   withPulse(x,"title",TARGET.title.x,TARGET.title.y,function(){
-    rr(x,BOX.x,BOX.y,BOX.w,BOX.h,BOX.r);x.fillStyle="#0b1f3a";x.fill();
-    var t=delivered.title||"Name of institution/local chapter";
+    rr(x,BOX.x,BOX.y,BOX.w,BOX.h,BOX.r);
+    if(ROLE==="pro"){var gg=x.createLinearGradient(BOX.x,0,BOX.x+BOX.w,0);gg.addColorStop(0,"#c99a1e");gg.addColorStop(.5,"#f1d27a");gg.addColorStop(1,"#c99a1e");x.fillStyle=gg;}
+    else x.fillStyle="#0b1f3a";
+    x.fill();
+    var t=delivered.title||ROLES[ROLE].cardPh;
     fitFont(x,t,"700",26,BOX.w-50);
-    x.textAlign="center";x.textBaseline="middle";x.fillStyle="#fff";x.globalAlpha=delivered.title?1:.7;
+    x.textAlign="center";x.textBaseline="middle";x.fillStyle=ROLE==="pro"?"#0b1f3a":"#fff";x.globalAlpha=delivered.title?1:.7;
     x.fillText(t,BOX.x+BOX.w/2,BOX.y+BOX.h/2+1);
   });
+  /* role badge pinned to the bottom of the photo frame */
+  x.save();x.globalAlpha=1;x.shadowColor="transparent";
+  var bt=ROLES[ROLE].badge;x.font="800 23px "+FONT;var bw=x.measureText(bt).width+56,bx=PH.x-bw/2,by=PH.y+PH.r-12;
+  rr(x,bx,by,bw,46,23);x.fillStyle=ROLE==="pro"?"#0b1f3a":"#188e00";x.fill();x.lineWidth=4;x.strokeStyle=ROLE==="pro"?GOLD:"#ffffff";x.stroke();
+  x.fillStyle=ROLE==="pro"?"#f1d27a":"#ffffff";x.textAlign="center";x.textBaseline="middle";x.fillText(bt,PH.x,by+24);
+  x.restore();
   withPulse(x,"quote",TARGET.quote.x,TARGET.quote.y,function(){
     var q=delivered.quote||DEFAULT_LINE;fitFont(x,q,"800",37,610);
     x.textAlign="center";x.textBaseline="alphabetic";x.fillStyle="#0b1f3a";x.fillText(q,TARGET.quote.x,1212);
@@ -658,6 +689,11 @@ function render(x,k,clean){
 }
 
 /* ---------- payloads the skeleton carries ---------- */
+function boardStyle(kind){
+  var b=BOARD[kind],o={};for(var k in b)o[k]=b[k];
+  if(ROLE==="pro"){if(kind==="name"){o.fill="url(#barGPro)";o.stroke=GOLD;}else if(kind==="title"){o.fill="url(#goldG)";o.color="#0b1f3a";}}
+  return o;
+}
 var BOARD={
   name:{h:70,rx:12,fill:"url(#barG)",stroke:"#fff",size:34,weight:800,color:"#fff",ty:12},
   title:{h:54,rx:10,fill:"#0b1f3a",stroke:"#fff",size:22,weight:700,color:"#fff",ty:8},
@@ -670,7 +706,7 @@ function makePayload(kind){
     pl.img=el("image",{href:current.photo.thumb,x:-68,y:-68,width:136,height:136,preserveAspectRatio:"xMidYMid slice","clip-path":"url(#pcSmall)"},g);
     pl.cx=66;pl.cy=-6;pl.w=152;
   }else{
-    var b=BOARD[kind];
+    var b=boardStyle(kind);
     pl.rect=el("rect",{y:-b.h/2,height:b.h,rx:b.rx,fill:b.fill,stroke:b.stroke,"stroke-width":3},g);
     pl.text=el("text",{y:b.ty,"text-anchor":"middle","font-family":FONT,"font-weight":b.weight,"font-size":b.size,fill:b.color},g);
     layoutBoard(pl);
@@ -768,7 +804,7 @@ function land(){
 function dropLetter(ch,kind){
   if(!payload||!ch.trim())return;
   var b=BOARD[kind],hw=handWorld(),tx=hw.x+payload.cx+payload.w/2-30,ty=hw.y+payload.cy+b.ty-2;
-  var node=el("text",{"text-anchor":"middle","font-family":FONT,"font-weight":800,"font-size":b.size,fill:kind==="name"?"#188e00":"#0b1f3a",stroke:"#fff","stroke-width":3,"paint-order":"stroke"},fx);
+  var node=el("text",{"text-anchor":"middle","font-family":FONT,"font-weight":800,"font-size":b.size,fill:kind==="name"?(ROLE==="pro"?"#1f3f6e":"#188e00"):"#0b1f3a",stroke:"#fff","stroke-width":3,"paint-order":"stroke"},fx);
   node.textContent=ch;
   effects.push({type:"char",fx:tx+(Math.random()*60-30),fy:ty-150,tx:tx,ty:ty,t:0,life:.38,node:node});
 }
@@ -923,10 +959,10 @@ var CAT_NAME={history:"History and profession",protection:"Radiation protection"
 var CAT_LINE={history:"Seeing the unseen since 1895",protection:"Low dose, high care. Always.",physics:"I speak fluent kVp and mAs",anatomy:"I see right through you, with care",positioning:"Breathe in… hold it… perfect!",modalities:"Every image tells a patient’s story",contrast:"Clear images, careful hands",digital:"Pixels, precision, patient care",care:"Patient care in every exposure","calc-isl":"Distance is my favourite shield","calc-dm":"Distance is my favourite shield",calc:"I do the maths behind the image"};
 var TIERS=[
   {min:10,t:"Perfect score",s:"Ten out of ten. Röntgen would be proud.",line:"Ten out of ten Radiographer"},
-  {min:8,t:"Certified Radiographer",s:"You clearly know your stuff.",line:"Tested, trusted, Radiographer"},
+  {min:8,t:"Certified Radiographer",tp:"Top of your game",s:"You clearly know your stuff.",line:"Tested, trusted, Radiographer"},
   {min:6,t:"Sharp eyes",s:"A solid score. Pick the line you earned.",line:"Sharp eyes, steady hands"},
-  {min:3,t:"Radiographer in the making",s:"Good effort. Every answer came with a lesson.",line:"Radiographer in the making"},
-  {min:0,t:"Keep learning",s:"Everyone starts somewhere. You still get your card.",line:"Still learning, always caring"}
+  {min:3,t:"Radiographer in the making",tp:"Still sharp",s:"Good effort. Every answer came with a lesson.",line:"Radiographer in the making",lp:"Still sharp, still learning"},
+  {min:0,t:"Keep learning",tp:"Time for a refresher",s:"Everyone starts somewhere. You still get your card.",sp:"Practice moves on, and a refresher never hurts. You still get your card.",line:"Still learning, always caring",lp:"Always learning, always caring"}
 ];
 var N_Q=10;
 var quiz={set:[],i:0,score:0,results:[],choices:[DEFAULT_LINE],picked:DEFAULT_LINE,done:ssGet("wrd-done")==="1"};
@@ -938,7 +974,11 @@ function stepHTML(parts){return '<div class="q-step">'+parts.map(function(p,i){r
 function pickSession(){
   var seen={};(lsGet("wrd-seen")||"").split(",").forEach(function(id){if(id)seen[id]=1;});
   var byCat={};BANK.forEach(function(q){(byCat[q.cat]=byCat[q.cat]||[]).push(q);});
-  var cats=shuffle(FACT_CATS).slice(0,7).concat(shuffle(CALC_CATS).slice(0,3)),out=[];
+  /* every quiz: 3 patient care, 1 each of protection, positioning, anatomy and history,
+     2 of imaging/contrast/digital, and at most 1 physics or calculation question */
+  var cats=["care","care","care","protection","positioning","anatomy","history"]
+    .concat(shuffle(["modalities","contrast","digital"]).slice(0,2))
+    .concat([Math.random()<.5?"physics":shuffle(CALC_CATS)[0]]),out=[];
   cats.forEach(function(c){
     var all=byCat[c]||[],pool=all.filter(function(q){return !seen[q.id];});
     if(!pool.length){all.forEach(function(q){delete seen[q.id];});pool=all;}
@@ -965,6 +1005,8 @@ function showIntro(){
     '<p class="q-kicker">Before you make your card</p>',
     '<h2 id="qTitle">Are you sure you’re a Radiographer?</h2>',
     '<p class="q-sub">Prove it with 10 quick questions. Each topic you get right unlocks a line you can put on your flyer.</p>',
+    '<p class="f" style="margin:0 0 8px">I am a</p>',
+    roleSegHTML(),
     '<div class="q-actions"><button class="btn primary" data-act="start" type="button">Start the quiz'+icon("arrow")+'</button><button class="btn quiet" data-act="skip" type="button">Skip</button></div>'
   ]);focusFirst("[data-act=start]");
 }
@@ -1022,12 +1064,15 @@ function answer(i,btn){
   var spans=qBody.querySelectorAll(".q-bar span");if(spans[quiz.i])spans[quiz.i].className=ok?"done":"miss";
   focusFirst("[data-act=next]");
 }
-function tier(){for(var i=0;i<TIERS.length;i++)if(quiz.score>=TIERS[i].min)return TIERS[i];return TIERS[TIERS.length-1];}
+function tier(){
+  var T=TIERS[TIERS.length-1];for(var i=0;i<TIERS.length;i++)if(quiz.score>=TIERS[i].min){T=TIERS[i];break;}
+  var p=ROLE==="pro";return {t:p&&T.tp||T.t,s:p&&T.sp||T.s,line:p&&T.lp||T.line};
+}
 function buildChoices(){
   var lines=[];
   quiz.set.forEach(function(Q,i){if(!quiz.results[i])return;var l=CAT_LINE[Q.cat]||(Q.cat.indexOf("calc-")===0?CAT_LINE.calc:null);if(l)lines.push(l);});
   var seen={};lines=lines.filter(function(l){if(seen[l])return false;seen[l]=1;return true;}).slice(0,5);
-  [tier().line,DEFAULT_LINE].forEach(function(l){if(!seen[l]){seen[l]=1;lines.push(l);}});
+  [tier().line].concat(ROLE==="pro"?[PRO_EXTRA]:[]).concat([DEFAULT_LINE]).forEach(function(l){if(!seen[l]){seen[l]=1;lines.push(l);}});
   return lines;
 }
 function showResult(again){
@@ -1080,6 +1125,7 @@ qBody.addEventListener("click",function(e){
   if(b.hasAttribute("data-opt")){answer(+b.getAttribute("data-opt"),b);return;}
   if(b.hasAttribute("data-line")){pickLine(b.getAttribute("data-line"));return;}
   if(b.hasAttribute("data-reason")){showReply(b.getAttribute("data-reason"));return;}
+  if(b.hasAttribute("data-role")){setRole(b.getAttribute("data-role"));return;}
   var act=b.getAttribute("data-act");
   if(act==="start"||act==="again")startQuiz();
   else if(act==="skip")showSkip();
@@ -1134,7 +1180,12 @@ function makeScoreBlob(s){
     // challenge pill
     rr(x,250,1076,580,100,50);x.fillStyle="#188e00";x.fill();
     x.fillStyle="#fff";x.font="800 38px "+FONT;x.fillText("Can you beat my score?",540,1140);
-    x.fillStyle="#8fa3ba";x.font="600 28px "+FONT;x.fillText(SITE_URL.replace("https://",""),540,1262);
+    x.fillStyle="#8fa3ba";x.font="600 28px "+FONT;x.fillText(SITE_URL.replace("https://",""),540,1240);
+    /* developer credit */
+    x.strokeStyle="rgba(255,255,255,.14)";x.lineWidth=2;x.beginPath();x.moveTo(400,1272);x.lineTo(680,1272);x.stroke();
+    x.font="600 24px "+FONT;var cr1="Developed by ",cr2="Jutelabs Limited",w1=x.measureText(cr1).width;x.font="800 24px "+FONT;var w2=x.measureText(cr2).width;
+    x.textAlign="left";x.font="600 24px "+FONT;x.fillStyle="#8fa3ba";x.fillText(cr1,540-(w1+w2)/2,1310);
+    x.font="800 24px "+FONT;x.fillStyle="#f4cd01";x.fillText(cr2,540-(w1+w2)/2+w1,1310);x.textAlign="center";
     return new Promise(function(res){c.toBlob(res,"image/png");});
   });
 }
@@ -1163,6 +1214,39 @@ document.addEventListener("keydown",function(e){
   var k=e.key.toUpperCase(),i="ABCD".indexOf(k);if(i<0)i="1234".indexOf(k);
   if(i>=0&&k.length===1){var b=qBody.querySelector('.opt[data-opt="'+i+'"]:not([disabled])');if(b)b.click();}
 });
+
+/* ---------- role: student radiographer or radiographer ---------- */
+function roleSegHTML(){
+  return '<div class="roleseg" role="radiogroup" aria-label="I am a"><button type="button" role="radio" data-role="student" aria-checked="'+(ROLE==="student")+'">Student Radiographer</button><button type="button" role="radio" data-role="pro" aria-checked="'+(ROLE==="pro")+'">Radiographer</button></div>';
+}
+function swapLine(l,to){for(var i=0;i<LINE_SWAP.length;i++){var pr=LINE_SWAP[i];if(l===pr[0]||l===pr[1])return to==="pro"?pr[1]:pr[0];}return l;}
+function fitLinesToRole(){
+  var seen={},out=[];
+  quiz.choices.forEach(function(l){l=swapLine(l,ROLE);if(ROLE!=="pro"&&l===PRO_EXTRA)return;if(!seen[l]){seen[l]=1;out.push(l);}});
+  if(ROLE==="pro"&&out.length>1&&!seen[PRO_EXTRA]){out.splice(out.length-1,0,PRO_EXTRA);seen[PRO_EXTRA]=1;}
+  if(!seen[DEFAULT_LINE])out.push(DEFAULT_LINE);
+  quiz.choices=out;
+  var q=swapLine(current.quote,ROLE);if(ROLE!=="pro"&&q===PRO_EXTRA)q=DEFAULT_LINE;
+  quiz.picked=q;return q;
+}
+function applyRoleUI(){
+  var R=ROLES[ROLE];
+  Array.prototype.forEach.call(document.querySelectorAll(".roleseg [data-role]"),function(b){b.setAttribute("aria-checked",String(b.getAttribute("data-role")===ROLE));});
+  $("titleLabel").textContent=R.field;$("title").placeholder=R.ph;$("titleErr").textContent=R.err;
+}
+function setRole(r){
+  r=r==="pro"?"pro":"student";var changed=r!==ROLE;ROLE=r;
+  try{localStorage.setItem("wrd-role",r);}catch(e){}
+  DEFAULT_LINE=ROLES[r].def;applyRoleUI();
+  if(!changed)return;
+  var q=fitLinesToRole(),moved=q!==current.quote;
+  current.quote=q;renderQuoteChips();
+  lsSet("wrd-lines",JSON.stringify({choices:quiz.choices,picked:q}));
+  cachedBlob=null;pulses.name=Math.max(pulses.name,.5);dirty=true;
+  if(moved)onChange("quote");
+  renderStats();
+}
+document.addEventListener("click",function(e){var b=e.target.closest&&e.target.closest("#form .roleseg [data-role]");if(b)setRole(b.getAttribute("data-role"));});
 
 /* flyer line chips in the form */
 function renderQuoteChips(){
@@ -1281,7 +1365,7 @@ card.addEventListener("pointerdown",function(e){
   var p=toCard(e);
   if(!delivered.photo){if(inCircle(p)&&!current.photo)$("photo").click();return;}
   if(!inCircle(p)&&!Object.keys(pts).length)return;
-  pts[e.pointerId]=p;card.setPointerCapture(e.pointerId);e.preventDefault();
+  pts[e.pointerId]=p;try{card.setPointerCapture(e.pointerId);}catch(err){}e.preventDefault();
   var ids=Object.keys(pts);
   if(ids.length===2){drag=null;pinch={d:dist(pts[ids[0]],pts[ids[1]]),z:delivered.photo.zoom};}
   else{drag={x:p.x,y:p.y,ox:delivered.photo.ox,oy:delivered.photo.oy};card.classList.add("dragging");}
@@ -1336,7 +1420,7 @@ function validate(){
   [["name","nameErr"],["title","titleErr"]].forEach(function(f){
     var ok=!!current[f[0]];$(f[0]).setAttribute("aria-invalid",ok?"false":"true");$(f[1]).hidden=ok;if(!ok&&!bad)bad=f[0];
   });
-  if(bad){$(bad).focus();toast("Fill in your name and institution or chapter first.","alert");return false;}
+  if(bad){$(bad).focus();toast("Fill in your name and "+ROLES[ROLE].field.toLowerCase()+" first.","alert");return false;}
   return true;
 }
 function celebrate(btn){confettiFrom(btn,100,2.4);toast("Saved. Share it with <b>#WorldRadiographyDay</b>","check",4200);recordCard();}
@@ -1358,8 +1442,8 @@ function renderStats(){
   var box=$("live");if(!stats||!(stats.total>=STATS_MIN||statsForced)){box.hidden=true;$("rank").hidden=true;return;}
   box.hidden=false;countUp($("liveTotal"),stats.total);
   var top=stats.top&&stats.top[0];
-  $("liveLead").textContent=top?top.name+" leads with "+fmtN(top.count):"";
-  var mine=chapterKey(current.title),max=top?top.count:1;
+  $("liveLead").textContent=(top?top.name+" leads with "+fmtN(top.count):"")+(stats.radiographers?(top?" · ":"")+fmtN(stats.radiographers)+" radiographers":"");
+  var mine=ROLE==="pro"?"":chapterKey(current.title),max=top?top.count:1;
   $("rankList").innerHTML=(stats.top||[]).map(function(c,i){
     return '<li class="'+(c.name===mine?"me":"")+'" style="--p:'+Math.max(4,Math.round(c.count/max*100))+'%"><span class="rn">'+(i+1)+'</span><span class="rc">'+esc(c.name)+'</span><span class="rv2">'+fmtN(c.count)+"</span></li>";
   }).join("")||"<li><span></span><span class=\"rc\">No chapters yet</span><span></span></li>";
@@ -1370,16 +1454,16 @@ function loadStats(){
   fetch("/api/stats",{headers:{accept:"application/json"}}).then(function(r){return r.ok?r.json():null;}).then(function(d){if(d&&typeof d.total==="number"){stats=d;renderStats();}}).catch(function(){});
 }
 function recordCard(){
-  var key=(current.name+"|"+chapterKey(current.title)).toLowerCase();if(!chapterKey(current.title)||!window.fetch)return;
+  var key=(ROLE+"|"+current.name+"|"+chapterKey(current.title)).toLowerCase();if((ROLE!=="pro"&&!chapterKey(current.title))||!window.fetch)return;
   var done=[];try{done=JSON.parse(lsGet("wrd-counted")||"[]");}catch(e){}
   if(done.indexOf(key)>=0)return;
-  fetch("/api/card",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({chapter:current.title})})
+  fetch("/api/card",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({chapter:current.title,role:ROLE})})
     .then(function(r){return r.ok?r.json():null;})
     .then(function(d){
       if(!d||typeof d.total!=="number")return;
       done.push(key);lsSet("wrd-counted",JSON.stringify(done.slice(-20)));
       stats=d;renderStats();
-      if((d.total>=STATS_MIN||statsForced)&&d.chapter)setTimeout(function(){toast("You made card number <b>"+fmtN(d.total)+"</b>. "+esc(d.chapter.name)+" is now #"+d.chapter.rank+" with "+fmtN(d.chapter.count)+" cards.","award",5200);},2600);
+      if(d.total>=STATS_MIN||statsForced)setTimeout(function(){toast("You made card number <b>"+fmtN(d.total)+"</b>."+(d.chapter?" "+esc(d.chapter.name)+" is now #"+d.chapter.rank+" with "+fmtN(d.chapter.count)+" cards.":""),"award",5200);},2600);
     }).catch(function(){});
 }
 $("liveMore").addEventListener("click",function(){rankOpen=!rankOpen;this.setAttribute("aria-expanded",rankOpen);this.lastChild.textContent=rankOpen?"Hide ranking":"Chapter ranking";renderStats();});
@@ -1421,6 +1505,7 @@ $("share").addEventListener("click",function(){
 /* ---------- boot ---------- */
 var saved=null;try{saved=JSON.parse(lsGet("wrd-lines")||"null");}catch(e){}
 if(saved&&saved.choices&&saved.choices.length){quiz.choices=saved.choices;quiz.picked=saved.picked||saved.choices[0];current.quote=delivered.quote=quiz.picked;}
+current.quote=delivered.quote=fitLinesToRole();applyRoleUI();
 renderQuoteChips();setAnim(animOn);afterDeliver();enableZoom(false);
 if(document.fonts&&document.fonts.ready)document.fonts.ready.then(function(){dirty=true;});
 requestAnimationFrame(frame);
