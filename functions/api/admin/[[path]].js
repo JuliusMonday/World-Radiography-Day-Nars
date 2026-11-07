@@ -102,7 +102,7 @@ async function verify(db, url) {
 export async function onRequest({ request, env, params }) {
   if (!env.DB) return json({ error: "database not configured" }, 503);
   const who = await checkAdmin(request, env, env.DB);
-  if (who.status === "setup") return json({ error: "Admin password is not set up yet: add the ADMIN_PASSWORD secret (12+ characters) in Cloudflare Pages and redeploy." }, 503);
+  if (who.status === "setup") return json({ error: "Admin is not available right now. Please try again later." }, 503);
   if (who.status === "locked") return json({ error: "Too many wrong passwords. Try again in an hour." }, 429);
   if (who.status === "signin") return json({ error: "Please enter the admin password." }, 401);
   if (who.status === "wrong") return json({ error: "Wrong password." }, 401);
