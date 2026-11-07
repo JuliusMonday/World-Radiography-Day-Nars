@@ -14,6 +14,11 @@ Developed by [Jutelabs Limited](https://www.linkedin.com/in/chimaobi-julius-mond
 | `src/nars-logo.jpg` | NARS logo used in the quiz |
 | `src/public/` | Link preview image (`og.jpg`), favicons and web manifest, copied into the site as is |
 | `src/build.py` | Builds the site into `site/` |
+| `functions/api/` | Card counter API: `POST /api/card` records a downloaded card for a chapter, `GET /api/stats` returns totals and the chapter ranking |
+| `lib/counter.js` | Shared helpers for the API (chapter name tidying, stats query) |
+| `wrangler.toml` | Pages config: output folder and the D1 database binding (`DB` → `wrd2026-cards`) |
+
+The counter stores only a count per chapter. Visitor IPs are hashed, used for rate limiting (20 cards an hour) and deleted after a day. The public counter stays hidden until 100 cards; add `?stats=1` to the URL to preview it.
 | `world Radiography day.svg` / `.png` | Original flyer design files |
 
 ## Build

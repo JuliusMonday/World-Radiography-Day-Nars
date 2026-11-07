@@ -220,6 +220,19 @@ body.ready .reveal{animation:up .6s cubic-bezier(.2,.8,.2,1) forwards}
 
 .foot{margin-top:28px}
 .linkrow{display:flex;flex-wrap:wrap;gap:6px 22px}
+.live{display:flex;align-items:center;flex-wrap:wrap;gap:4px 10px;padding:12px 14px;margin:0 0 20px;border-radius:12px;background:var(--green-tint);font-size:14px}
+.live[hidden],.rank[hidden]{display:none}
+.live .dot{width:9px;height:9px;border-radius:50%;background:var(--green);animation:ping 1.8s infinite}
+@keyframes ping{0%{box-shadow:0 0 0 0 rgba(24,142,0,.45)}70%{box-shadow:0 0 0 8px rgba(24,142,0,0)}100%{box-shadow:0 0 0 0 rgba(24,142,0,0)}}
+.live b{font:800 16px var(--head);font-variant-numeric:tabular-nums}
+.live .lsep{color:var(--muted)}
+.live .lmore{margin:0 0 0 auto}
+.rank{margin:-10px 0 20px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;animation:up .3s both}
+.rank ol{margin:0;padding:0;list-style:none;display:grid;gap:6px}
+.rank li{display:grid;grid-template-columns:24px 1fr auto;gap:10px;align-items:center;padding:6px 8px;border-radius:8px;font-size:14px;background:linear-gradient(90deg,#eef4ec var(--p),transparent var(--p))}
+.rank li.me{box-shadow:inset 0 0 0 1.5px var(--green);color:var(--green-d);font-weight:700}
+.rank .rn{font:800 13px var(--head);color:var(--muted)}
+.rank .rv2{font-weight:700;font-variant-numeric:tabular-nums}
 .linkbtn[hidden]{display:none}
 
 /* desktop: the page fits the window; the card stays in view and only the form column scrolls */
@@ -436,6 +449,14 @@ var PL=(function(){
       <p class="lead reveal" style="animation-delay:.06s">Answer 10 quick radiography questions, add your details and photo, then download your card in high resolution.</p>
 
       <form class="panel reveal" style="animation-delay:.12s" id="form" novalidate>
+        <div class="live" id="live" hidden>
+          <span class="dot" aria-hidden="true"></span>
+          <span><b id="liveTotal">0</b> cards made</span>
+          <span class="lsep" aria-hidden="true">·</span>
+          <span id="liveLead"></span>
+          <button class="linkbtn lmore" id="liveMore" type="button" aria-expanded="false" aria-controls="rank"><span data-i="award"></span>Chapter ranking</button>
+        </div>
+        <div class="rank" id="rank" hidden><ol id="rankList"></ol></div>
         <div class="step">
           <p class="stephead"><b>1</b>Your details</p>
           <div class="fields2">
@@ -1318,7 +1339,59 @@ function validate(){
   if(bad){$(bad).focus();toast("Fill in your name and institution or chapter first.","alert");return false;}
   return true;
 }
-function celebrate(btn){confettiFrom(btn,100,2.4);toast("Saved. Share it with <b>#WorldRadiographyDay</b>","check",4200);}
+function celebrate(btn){confettiFrom(btn,100,2.4);toast("Saved. Share it with <b>#WorldRadiographyDay</b>","check",4200);recordCard();}
+
+/* ---------- live counter and chapter ranking (Cloudflare Pages Functions + D1) ----------
+   Shown only once the total passes STATS_MIN, so an early, small number never makes the site look empty.
+   Add ?stats=1 to the URL to preview it before then. */
+var STATS_MIN=100,statsForced=/[?&]stats=1\b/.test(location.search),stats=null,rankOpen=false,shownTotal=0;
+function chapterKey(raw){
+  var STOP={NARS:1,CHAPTER:1,CHAP:1,THE:1,OF:1,STUDENT:1,STUDENTS:1,ASSOCIATION:1,NIGERIAN:1,RADIOGRAPHY:1,RADIOGRAPHERS:1};
+  return String(raw||"").toUpperCase().replace(/[^A-Z0-9 ]+/g," ").split(/\s+/).filter(function(w){return w&&!STOP[w];}).join(" ").slice(0,40);
+}
+function fmtN(n){return Number(n||0).toLocaleString("en-NG");}
+function countUp(elm,to){
+  var from=shownTotal,t0=performance.now();shownTotal=to;if(reduce||from===to){elm.textContent=fmtN(to);return;}
+  (function step(now){var k=Math.min(1,(now-t0)/900),e=1-Math.pow(1-k,3);elm.textContent=fmtN(Math.round(from+(to-from)*e));if(k<1)setTimeout(function(){step(performance.now());},16);})(t0);
+}
+function renderStats(){
+  var box=$("live");if(!stats||!(stats.total>=STATS_MIN||statsForced)){box.hidden=true;$("rank").hidden=true;return;}
+  box.hidden=false;countUp($("liveTotal"),stats.total);
+  var top=stats.top&&stats.top[0];
+  $("liveLead").textContent=top?top.name+" leads with "+fmtN(top.count):"";
+  var mine=chapterKey(current.title),max=top?top.count:1;
+  $("rankList").innerHTML=(stats.top||[]).map(function(c,i){
+    return '<li class="'+(c.name===mine?"me":"")+'" style="--p:'+Math.max(4,Math.round(c.count/max*100))+'%"><span class="rn">'+(i+1)+'</span><span class="rc">'+esc(c.name)+'</span><span class="rv2">'+fmtN(c.count)+"</span></li>";
+  }).join("")||"<li><span></span><span class=\"rc\">No chapters yet</span><span></span></li>";
+  $("rank").hidden=!rankOpen;
+}
+function loadStats(){
+  if(!window.fetch)return;
+  fetch("/api/stats",{headers:{accept:"application/json"}}).then(function(r){return r.ok?r.json():null;}).then(function(d){if(d&&typeof d.total==="number"){stats=d;renderStats();}}).catch(function(){});
+}
+function recordCard(){
+  var key=(current.name+"|"+chapterKey(current.title)).toLowerCase();if(!chapterKey(current.title)||!window.fetch)return;
+  var done=[];try{done=JSON.parse(lsGet("wrd-counted")||"[]");}catch(e){}
+  if(done.indexOf(key)>=0)return;
+  fetch("/api/card",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({chapter:current.title})})
+    .then(function(r){return r.ok?r.json():null;})
+    .then(function(d){
+      if(!d||typeof d.total!=="number")return;
+      done.push(key);lsSet("wrd-counted",JSON.stringify(done.slice(-20)));
+      stats=d;renderStats();
+      if((d.total>=STATS_MIN||statsForced)&&d.chapter)setTimeout(function(){toast("You made card number <b>"+fmtN(d.total)+"</b>. "+esc(d.chapter.name)+" is now #"+d.chapter.rank+" with "+fmtN(d.chapter.count)+" cards.","award",5200);},2600);
+    }).catch(function(){});
+}
+$("liveMore").addEventListener("click",function(){rankOpen=!rankOpen;this.setAttribute("aria-expanded",rankOpen);this.lastChild.textContent=rankOpen?"Hide ranking":"Chapter ranking";renderStats();});
+$("title").addEventListener("change",renderStats);
+loadStats();setInterval(function(){if(!document.hidden)loadStats();},60000);
+
+/* launch today, event tomorrow: wording follows the date in Nigeria */
+(function(){
+  var d="";try{d=new Intl.DateTimeFormat("en-CA",{timeZone:"Africa/Lagos"}).format(new Date());}catch(e){d=new Date().toISOString().slice(0,10);}
+  var note=d==="2026-11-07"?"World Radiography Day is tomorrow, 8 November. Get your card ready. ":d<"2026-11-07"?"World Radiography Day is on 8 November. Get your card ready. ":d==="2026-11-08"?"Happy World Radiography Day! ":"";
+  if(note){var p=document.querySelector(".lead");p.insertBefore(document.createTextNode(note),p.firstChild);}
+})();
 var SAVE_HTML=$("save").innerHTML;
 $("save").addEventListener("click",function(){
   var btn=this;if(!validate())return;

@@ -1,0 +1,10 @@
+# Cloudflare Pages configuration (this file is the source of truth for bindings)
+name = "nars-world-radiography-day-2026"
+pages_build_output_dir = "site"
+compatibility_date = "2026-11-01"
+
+# Card counter and chapter ranking (functions/api/*)
+[[d1_databases]]
+binding = "DB"
+database_name = "wrd2026-cards"
+database_id = "1695f5c1-7728-47d1-a4d4-366f251463b5"
