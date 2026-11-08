@@ -984,10 +984,24 @@ var DEVICE=(function(){
   }
   return d;
 })();
-function postJSON(url,body){
-  return fetch(url,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)}).then(function(r){
-    return r.json().catch(function(){return {};}).then(function(j){if(!r.ok){var e=new Error(j.error||"request failed");e.status=r.status;throw e;}return j;});
-  });
+function postJSON(url,body,opt){
+  opt=opt||{};var tries=opt.retries||0,wait=[1000,2500,5000];
+  function once(){
+    var ctl=window.AbortController?new AbortController():null,timer=ctl?setTimeout(function(){ctl.abort();},opt.timeout||20000):0;
+    return fetch(url,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body),signal:ctl?ctl.signal:undefined}).then(function(r){
+      clearTimeout(timer);
+      return r.json().catch(function(){return {};}).then(function(j){if(!r.ok){var e=new Error(j.error||"request failed");e.status=r.status;throw e;}return j;});
+    },function(err){clearTimeout(timer);var e=new Error("network");e.status=0;throw e;});
+  }
+  /* Retry dropped connections and server hiccups (safe for /api/quiz/answer: a repeat returns what was recorded). */
+  function go(n){
+    return once().catch(function(e){
+      if(n>=tries||(e.status&&e.status<500))throw e;
+      if(opt.onRetry)opt.onRetry(n+1);
+      return new Promise(function(res){setTimeout(res,wait[Math.min(n,wait.length-1)]);}).then(function(){return go(n+1);});
+    });
+  }
+  return go(0);
 }
 var CAT_NAME={history:"History and profession",protection:"Radiation protection",physics:"Physics",anatomy:"Anatomy",positioning:"Positioning",modalities:"Imaging modalities",contrast:"Contrast studies",digital:"Digital imaging",care:"Patient care"};
 var CAT_LINE={history:"Seeing the unseen since 1895",protection:"Low dose, high care. Always.",physics:"I speak fluent kVp and mAs",anatomy:"I see right through you, with care",positioning:"Breathe in… hold it… perfect!",modalities:"Every image tells a patient’s story",contrast:"Clear images, careful hands",digital:"Pixels, precision, patient care",care:"Patient care in every exposure","calc-isl":"Distance is my favourite shield","calc-dm":"Distance is my favourite shield",calc:"I do the maths behind the image"};
@@ -1112,8 +1126,11 @@ function answer(i,btn){
   var Q=quiz.set[quiz.i],idx=quiz.i,btns=qBody.querySelectorAll(".opt"),choice=quiz.opts[i].t;
   Array.prototype.forEach.call(btns,function(b){b.disabled=true;});btn.classList.add("picked");
   var after=qBody.querySelector(".q-after");after.innerHTML='<p class="q-note">Checking…</p>';
-  postJSON("/api/quiz/answer",{attempt:quiz.attempt,index:idx,choice:choice}).then(function(d){
+  postJSON("/api/quiz/answer",{attempt:quiz.attempt,index:idx,choice:choice},{retries:3,timeout:15000,onRetry:function(){
+    after.innerHTML='<p class="q-note">Slow connection. Still checking…</p>';
+  }}).then(function(d){
     quiz.busy=false;if(quiz.i!==idx)return;
+    if(d.replay&&d.choice){for(var k=0;k<quiz.opts.length;k++)if(quiz.opts[k].t===d.choice){btn.classList.remove("picked");i=k;btn=btns[k];choice=d.choice;break;}}
     var ok=!!d.correct;Q.correct=d.answer;Q.f=d.fact;
     Array.prototype.forEach.call(btns,function(b,j){b.classList.remove("picked");if(quiz.opts[j].t===d.answer)b.classList.add("right");else if(j!==i)b.classList.add("dim");});
     if(!ok)btn.classList.add("wrong");
@@ -1128,7 +1145,7 @@ function answer(i,btn){
     quiz.busy=false;
     if(e.status===409||e.status===410||e.status===404){quizError(e.status===410?"This quiz has expired":"This quiz can’t continue","again",e.status);return;}
     Array.prototype.forEach.call(btns,function(b){b.disabled=false;});btn.classList.remove("picked");
-    after.innerHTML='<p class="q-note" style="color:var(--red)">We couldn’t check that answer. Check your connection and tap your answer again.</p>';
+    after.innerHTML='<p class="q-note" style="color:var(--red)">Your connection dropped. Check your data or Wi-Fi, then tap your answer again.</p>';
   });
 }
 function tier(){
